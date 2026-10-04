@@ -1,8 +1,12 @@
 import type { IssueId, Region } from '../engine/types';
+import { L, type LStr } from '../i18n';
 
 export interface StateInfo {
   code: string;
+  /** English name. */
   name: string;
+  /** Polish name (exonym where one is in common use). */
+  namePl: string;
   fips: string;
   ev: number;
   /** Voting-eligible population, millions. */
@@ -95,9 +99,12 @@ const DISTRICTS: Record<string, { id: string; margin: number }[]> = {
   ],
 };
 
+const POLISH_NAMES: Record<string, string> = {"CA": "Kalifornia", "DC": "Dystrykt Kolumbii", "FL": "Floryda", "HI": "Hawaje", "LA": "Luizjana", "MS": "Missisipi", "NM": "Nowy Meksyk", "NY": "Nowy Jork", "NC": "Karolina Północna", "ND": "Dakota Północna", "PA": "Pensylwania", "SC": "Karolina Południowa", "SD": "Dakota Południowa", "TX": "Teksas", "VA": "Wirginia", "WA": "Waszyngton", "WV": "Wirginia Zachodnia", "CO": "Kolorado", "GA": "Georgia"};
+
 export const STATES: StateInfo[] = ROWS.map((r) => ({
   code: r[0],
   name: r[1],
+  namePl: POLISH_NAMES[r[0]] ?? r[1],
   fips: r[2],
   ev: r[3],
   vep: r[4],
@@ -117,13 +124,19 @@ export const STATE_CODES = STATES.map((s) => s.code);
 export const TOTAL_EV = STATES.reduce((a, s) => a + s.ev, 0);
 export const EV_TO_WIN = Math.floor(TOTAL_EV / 2) + 1;
 
-export const REGION_LABEL: Record<Region, string> = {
-  northeast: 'Północny Wschód',
-  south: 'Południe',
-  midwest: 'Środkowy Zachód',
-  west: 'Wybrzeże Pacyfiku',
-  mountain: 'Góry Skaliste i Południowy Zachód',
+export const REGION_LABEL: Record<Region, LStr> = {
+  northeast: L('Północny Wschód', 'Northeast'),
+  south: L('Południe', 'South'),
+  midwest: L('Środkowy Zachód', 'Midwest'),
+  west: L('Wybrzeże Pacyfiku', 'Pacific Coast'),
+  mountain: L('Góry Skaliste i Południowy Zachód', 'Mountain West & Southwest'),
 };
+
+/** Localized state name. */
+export function stateName(code: string): LStr {
+  const s = STATE_BY_CODE[code];
+  return s ? { pl: s.namePl, en: s.name } : { pl: code, en: code };
+}
 
 /** States that host rich donor networks (better fundraisers). */
 export const DONOR_HUBS = new Set(['CA', 'NY', 'TX', 'FL', 'IL', 'MA', 'NJ', 'WA', 'DC', 'CT']);

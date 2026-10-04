@@ -15,6 +15,16 @@ CALIBRATE=1 npx vitest run tests/calibrate.test.ts   # kalibracja modelu wyborc�
 
 Gra działa w całości lokalnie (bez serwera i kluczy API). Czcionki i dane mapy są dołączone przez npm.
 
+## Języki / Languages
+
+Gra jest w pełni dwujęzyczna: **polski** (domyślnie) i **angielski**. Przełącznik **PL / EN** jest w menu głównym, na ekranie tworzenia kandydatów, na górnym pasku kampanii, w wieczór wyborczy i na ekranie wyników. Wybór jest zapamiętywany w przeglądarce.
+
+- Zmiana języka działa w każdej chwili, także w trakcie kampanii — cała historia (wiadomości, wydarzenia, debaty, analiza powyborcza) przełącza się od razu, bo silnik zapisuje każdy tekst w obu językach (`LStr = { pl, en }`).
+- Programy i hasła wygenerowane przez AI na ekranie tworzenia kandydatów są przepisywane na nowy język bez zmiany stanowisk; teksty wpisane ręcznie zostają bez zmian.
+- Kod: `src/i18n/` (`L(pl, en)`, `loc()`, `fmt()` i hook `useT()` dla komponentów).
+
+The whole game is available in Polish and English — use the **PL / EN** switch in the menu, setup, campaign top bar, election night and results screens. Switching mid-game translates the full campaign history.
+
 ## Stack
 
 | Warstwa | Wybór | Dlaczego |

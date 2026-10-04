@@ -1,14 +1,16 @@
 import type { GameState, KeyEvent, NewsItem, NewsTone, Severity } from './types';
+import type { LStr } from '../i18n';
 
 export function nextId(game: GameState, prefix: string): string {
   game.idCounter += 1;
   return `${prefix}${game.idCounter}`;
 }
 
+/** Publish a news item. Texts are bilingual so the feed follows the selected UI language. */
 export function pushNews(
   game: GameState,
-  headline: string,
-  opts: { tone?: NewsTone; candId?: string; body?: string; category?: string; severity?: Severity } = {},
+  headline: LStr,
+  opts: { tone?: NewsTone; candId?: string; body?: LStr; category?: string; severity?: Severity } = {},
 ): NewsItem {
   const item: NewsItem = {
     id: nextId(game, 'n'),

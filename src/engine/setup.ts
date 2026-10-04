@@ -10,6 +10,7 @@ import { createRng } from './rng';
 import { initialEconomy } from './economy';
 import { scheduleDebates } from './debate';
 import { pushNews } from './news';
+import { bi, L } from '../i18n';
 import { refreshDerived } from './simulation';
 import { computeSnapshot, economyIndex } from './voterModel';
 import { clamp } from './util';
@@ -17,7 +18,7 @@ import { emptyLedger } from './actions';
 import { initialSocial } from './social';
 import { scheduleConventions } from './timeline';
 
-export const GAME_VERSION = 2;
+export const GAME_VERSION = 3;
 
 const ALT_COLORS = ['#06b6d4', '#f97316', '#ec4899', '#84cc16', '#a855f7', '#eab308'];
 
@@ -139,12 +140,13 @@ export function createGame(setups: CandidateSetup[], settings: GameSettings): Ga
     result: null,
   };
 
-  pushNews(game, `Rusza kampania prezydencka! Do wyborów zostało ${settings.totalDays} dni`, {
+  pushNews(game, L(`Rusza kampania prezydencka! Do wyborów zostało ${settings.totalDays} dni`, `The presidential campaign begins! ${settings.totalDays} days until the election`), {
     tone: 'breaking',
     category: 'campaign',
-    body: candidates.map((c) => `${c.name} (${PARTIES[c.party].short})`).join(' vs '),
+    body: bi((l) => candidates.map((c) => `${c.name} (${PARTIES[c.party].short[l]})`).join(' vs ')),
   });
-  pushNews(game, `Gospodarka na starcie kampanii: PKB ${economy.gdp.toFixed(1)}%, inflacja ${economy.inflation.toFixed(1)}%, bezrobocie ${economy.unemployment.toFixed(1)}%`, {
+  const [g, inf, un] = [economy.gdp.toFixed(1), economy.inflation.toFixed(1), economy.unemployment.toFixed(1)];
+  pushNews(game, L(`Gospodarka na starcie kampanii: PKB ${g}%, inflacja ${inf}%, bezrobocie ${un}%`, `The economy at the start of the campaign: GDP ${g}%, inflation ${inf}%, unemployment ${un}%`), {
     category: 'economy',
   });
   game.conventions = scheduleConventions(game);

@@ -9,22 +9,23 @@ import { PARTIES } from '../data/parties';
 import { TUNING } from './config';
 import type { Economy, GameState, GroupId, GroupResult, IssueId } from './types';
 import { GROUP_IDS, SEGMENTS } from './groups';
+import { L, type LStr } from '../i18n';
 import { clamp } from './util';
 
 export type FactorKey = 'partisan' | 'issues' | 'quality' | 'favor' | 'momentum' | 'economy' | 'effort' | 'social' | 'home' | 'local' | 'brand';
 
-export const FACTOR_LABEL: Record<FactorKey, string> = {
-  partisan: 'Lojalność partyjna',
-  issues: 'Program i tematy',
-  quality: 'Doświadczenie i charyzma',
-  favor: 'Wizerunek (favorability)',
-  momentum: 'Momentum medialne',
-  economy: 'Gospodarka i ocena administracji',
-  effort: 'Kampania w terenie i reklamy',
-  social: 'Media społecznościowe',
-  home: 'Stan rodzinny',
-  local: 'Wydarzenia lokalne',
-  brand: 'Bariera trzeciej partii',
+export const FACTOR_LABEL: Record<FactorKey, LStr> = {
+  partisan: L('Lojalność partyjna', 'Party loyalty'),
+  issues: L('Program i tematy', 'Platform & issues'),
+  quality: L('Doświadczenie i charyzma', 'Experience & charisma'),
+  favor: L('Wizerunek', 'Favorability'),
+  momentum: L('Impet medialny', 'Media momentum'),
+  economy: L('Gospodarka i ocena administracji', 'Economy & approval'),
+  effort: L('Kampania w terenie i reklamy', 'Ground game & ads'),
+  social: L('Media społecznościowe', 'Social media'),
+  home: L('Stan rodzinny', 'Home state'),
+  local: L('Wydarzenia lokalne', 'Local events'),
+  brand: L('Bariera trzeciej partii', 'Third-party barrier'),
 };
 
 export interface StateSupport {
@@ -384,18 +385,39 @@ export function computeSnapshot(game: GameState): Snapshot {
 export type RatingKey = 'safeD' | 'likelyD' | 'leanD' | 'tossup' | 'leanR' | 'likelyR' | 'safeR';
 
 /** Cook-style rating from an estimate. Non-major parties are rated on the side of their axis. */
-export function rateState(game: GameState, est: Record<string, number>): { key: RatingKey; label: string; leader: string; margin: number } {
+const PARTY_ADJ: Record<string, LStr> = {
+  DEM: L('demokratyczny', 'Democrat'),
+  REP: L('republikański', 'Republican'),
+  LIB: L('libertariański', 'Libertarian'),
+  GRN: L('dla Zielonych', 'Green'),
+  IND: L('dla niezależnego', 'Independent'),
+};
+
+/** Rating short labels used in the ratings strip and legends. */
+export const RATING_SHORT: Record<RatingKey, LStr> = {
+  safeD: L('Pewny D', 'Safe D'),
+  likelyD: L('Raczej D', 'Likely D'),
+  leanD: L('Lekko D', 'Lean D'),
+  tossup: L('Remis', 'Toss-up'),
+  leanR: L('Lekko R', 'Lean R'),
+  likelyR: L('Raczej R', 'Likely R'),
+  safeR: L('Pewny R', 'Safe R'),
+};
+
+/** Cook-style rating from an estimate. Non-major parties are rated on the side of their axis. */
+export function rateState(game: GameState, est: Record<string, number>): { key: RatingKey; label: LStr; leader: string; margin: number } {
   const l = leaderOf(est);
   const c = game.candidates.find((x) => x.id === l.id)!;
   const m = l.margin;
-  if (m < 0.02) return { key: 'tossup', label: 'Toss-up', leader: l.id, margin: m };
+  if (m < 0.02) return { key: 'tossup', label: L('Wyrównany (remis)', 'Toss-up'), leader: l.id, margin: m };
   const right = PARTIES[c.party].axis > 0 || (PARTIES[c.party].axis === 0 && c.party !== 'DEM' && game.candidates.findIndex((x) => x.id === c.id) % 2 === 1);
   const side = right ? 'R' : 'D';
-  const word = c.party === 'DEM' ? 'Democrat' : c.party === 'REP' ? 'Republican' : c.party === 'LIB' ? 'Libertarian' : c.party === 'GRN' ? 'Green' : 'Independent';
   const lvl = m < 0.06 ? 'lean' : m < 0.12 ? 'likely' : 'safe';
   const key = `${lvl}${side}` as RatingKey;
-  const lvlLabel = lvl === 'lean' ? 'Lean' : lvl === 'likely' ? 'Likely' : 'Safe';
-  return { key, label: `${lvlLabel} ${word}`, leader: l.id, margin: m };
+  const adj = PARTY_ADJ[c.party];
+  const plLvl = lvl === 'lean' ? 'Lekko' : lvl === 'likely' ? 'Raczej' : 'Pewnie';
+  const enLvl = lvl === 'lean' ? 'Lean' : lvl === 'likely' ? 'Likely' : 'Safe';
+  return { key, label: L(`${plLvl} ${adj.pl}`, `${enLvl} ${adj.en}`), leader: l.id, margin: m };
 }
 
 /** Margin (pp) of `candId` against the strongest rival in a state estimate. */

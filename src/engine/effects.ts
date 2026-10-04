@@ -1,7 +1,8 @@
 // Declarative effect language used by events and decisions. Keeping effects as data makes it
 // trivial to add new events without touching the simulation core.
 
-import { STATES, STATE_BY_CODE } from '../data/states';
+import { STATES, STATE_BY_CODE, stateName } from '../data/states';
+import { fmt, type LStr } from '../i18n';
 import type { CandidateStats, Economy, EventContext, FundSource, GameState, IssueId } from './types';
 import type { Rng } from './rng';
 import { clamp } from './util';
@@ -27,8 +28,8 @@ export type Effect =
   | { k: 'econ'; field: keyof Omit<Economy, 'confidence'>; v: number }
   /** Local opinion shift in ctx.state (or listed states) for target. */
   | { k: 'local'; t: Target; v: number; states?: string[]; region?: boolean }
-  | { k: 'chance'; p: number; yes: Effect[]; no: Effect[]; yesNews?: string; noNews?: string }
-  | { k: 'key'; text: string; impact: number; t?: Target }
+  | { k: 'chance'; p: number; yes: Effect[]; no: Effect[]; yesNews?: LStr; noNews?: LStr }
+  | { k: 'key'; text: LStr; impact: number; t?: Target }
   /** Permanent change of a candidate statistic. */
   | { k: 'stat'; t: Target; stat: keyof CandidateStats; v: number }
   | { k: 'buzz'; t: Target; v: number }
@@ -51,12 +52,10 @@ function targets(game: GameState, ctx: EventContext, t: Target): string[] {
   }
 }
 
-export function fill(text: string, game: GameState, ctx: EventContext): string {
+/** Fill {self}, {other} and {state} placeholders in both languages. */
+export function fill(text: LStr, game: GameState, ctx: EventContext): LStr {
   const name = (id?: string) => game.candidates.find((c) => c.id === id)?.name ?? '';
-  return text
-    .replaceAll('{self}', name(ctx.candId))
-    .replaceAll('{other}', name(ctx.otherId))
-    .replaceAll('{state}', ctx.state ? STATE_BY_CODE[ctx.state].name : '');
+  return fmt(text, { self: name(ctx.candId), other: name(ctx.otherId), state: ctx.state ? stateName(ctx.state) : '' });
 }
 
 /**

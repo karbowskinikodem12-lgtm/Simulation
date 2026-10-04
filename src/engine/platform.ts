@@ -4,17 +4,18 @@
 import { PARTIES } from '../data/parties';
 import { PROFILES } from '../data/profiles';
 import { ISSUES, ISSUE_IDS, ISSUE_BY_ID } from '../data/issues';
-import { LEXICON, ISSUE_MENTION, PLATFORM_PHRASES, SLOGAN_PARTS } from '../data/platformText';
+import { LEXICON, ISSUE_MENTION, PLATFORM_PHRASES, SLOGANS } from '../data/platformText';
 import type { IssueId, PartyId, Positions, ProfileId } from './types';
 import { createRng, type Rng } from './rng';
 import { clamp } from './util';
+import { bi, getLang, L, loc, type Lang, type LStr } from '../i18n';
 
 export type PlatformStyle = 'moderate' | 'mainstream' | 'radical';
 
-export const STYLE_LABEL: Record<PlatformStyle, string> = {
-  moderate: 'Umiarkowany',
-  mainstream: 'Główny nurt',
-  radical: 'Radykalny',
+export const STYLE_LABEL: Record<PlatformStyle, LStr> = {
+  moderate: L('Umiarkowany', 'Moderate'),
+  mainstream: L('Główny nurt', 'Mainstream'),
+  radical: L('Radykalny', 'Radical'),
 };
 
 const STYLE_SCALE: Record<PlatformStyle, number> = { moderate: 0.5, mainstream: 1, radical: 1.4 };
@@ -42,11 +43,12 @@ export function bucketOf(v: number): 0 | 1 | 2 | 3 | 4 {
   return 4;
 }
 
-export function platformLine(issue: IssueId, v: number, rng: Rng): string {
-  return rng.pick(PLATFORM_PHRASES[issue][bucketOf(v)]);
+export function platformLine(issue: IssueId, v: number, rng: Rng, lang: Lang = getLang()): string {
+  return rng.pick(PLATFORM_PHRASES[lang][issue][bucketOf(v)]);
 }
 
-export function generatePlatform(party: PartyId, profile: ProfileId, style: PlatformStyle, seed: number): GeneratedPlatform {
+/** Generate a platform; texts are written in `lang` (they become the candidate's own words). */
+export function generatePlatform(party: PartyId, profile: ProfileId, style: PlatformStyle, seed: number, lang: Lang = getLang()): GeneratedPlatform {
   const rng = createRng(seed);
   const def = PARTIES[party];
   const tilt = PROFILE_TILT[profile] ?? {};
@@ -59,19 +61,16 @@ export function generatePlatform(party: PartyId, profile: ProfileId, style: Plat
     positions[id] = Math.round(clamp(v, -100, 100));
   }
   const platform = {} as Record<IssueId, string>;
-  for (const id of ISSUE_IDS) platform[id] = platformLine(id, positions[id], rng);
+  for (const id of ISSUE_IDS) platform[id] = platformLine(id, positions[id], rng, lang);
 
   // Signature issues: the ones furthest from the centre, which the candidate will campaign on.
   const signature = [...ISSUES].sort((a, b) => Math.abs(positions[b.id]) * b.baseSalience - Math.abs(positions[a.id]) * a.baseSalience).slice(0, 3);
-  const manifesto = [
-    PROFILES[profile].flavor,
-    `Moje priorytety to ${signature.map((s) => s.label.toLowerCase()).join(', ')}.`,
-    ...signature.map((s) => platform[s.id]),
-  ].join(' ');
+  const priorities = signature.map((s) => loc(s.label, lang).toLowerCase()).join(', ');
+  const manifesto = [loc(PROFILES[profile].flavor, lang), lang === 'pl' ? `Moje priorytety to ${priorities}.` : `My priorities are ${priorities}.`, ...signature.map((s) => platform[s.id])].join(' ');
 
   const avg = ISSUE_IDS.reduce((a, id) => a + positions[id], 0) / ISSUE_IDS.length;
-  const tail = avg < -20 ? SLOGAN_PARTS.left : avg > 20 ? SLOGAN_PARTS.right : SLOGAN_PARTS.center;
-  const slogan = `${rng.pick(SLOGAN_PARTS.open)} ${rng.pick(tail)}!`;
+  const bank = SLOGANS[lang];
+  const slogan = rng.pick(avg < -20 ? bank.left : avg > 20 ? bank.right : bank.center);
 
   return { positions, platform, manifesto, slogan };
 }
@@ -105,8 +104,8 @@ export function analyzeProgramText(manifesto: string, perIssue: Partial<Record<I
   return { positions, detected };
 }
 
-export function describeStance(issue: IssueId, v: number): string {
+export function describeStance(issue: IssueId, v: number): LStr {
   const d = ISSUE_BY_ID[issue];
-  if (Math.abs(v) < 12) return `${d.label}: pozycja centrowa`;
-  return `${d.label}: ${v < 0 ? d.left : d.right}`;
+  if (Math.abs(v) < 12) return bi((l) => `${loc(d.label, l)}: ${l === 'pl' ? 'pozycja centrowa' : 'centrist position'}`);
+  return bi((l) => `${loc(d.label, l)}: ${loc(v < 0 ? d.left : d.right, l)}`);
 }

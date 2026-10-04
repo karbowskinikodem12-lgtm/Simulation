@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useGame } from '../../store/gameStore';
-import { STATE_BY_CODE, REGION_LABEL, DONOR_HUBS } from '../../data/states';
+import { STATE_BY_CODE, REGION_LABEL, DONOR_HUBS, stateName } from '../../data/states';
 import { ISSUES, ISSUE_BY_ID } from '../../data/issues';
 import { TUNING } from '../../engine/config';
 import { AD_KIND_LABEL, SCHEDULE_META, mediaIntensity, officeCost, saturation, suggestedBudget, travelCost } from '../../engine/actions';
@@ -11,6 +11,7 @@ import type { AdChannel, AdKind, IssueId, ScheduleKind } from '../../engine/type
 import { RATING_COLORS } from '../colors';
 import { GROUP_LABEL } from '../../engine/groups';
 import type { GroupId } from '../../engine/types';
+import { useT } from '../../i18n/useT';
 
 const STATE_GROUPS: GroupId[] = ['young', 'senior', 'city', 'suburb', 'rural', 'college', 'noncollege', 'independent'];
 import { battlegrounds, candColor, dayLabel } from '../selectors';
@@ -40,12 +41,13 @@ function MediaBuyForm({ scope }: { scope: string }) {
   const ref = mediaIntensity(player, ch, scope, suggestedBudget(ch, scope, days), days);
   const sat = saturation(game, player.id, ch, scope);
   const perMillion = intensity / Math.max(0.1, amount);
-  const where = scope === 'national' ? 'w całym kraju' : `w stanie ${STATE_BY_CODE[scope].name}`;
+  const { t, loc, lang } = useT();
+  const where = scope === 'national' ? t('w całym kraju', 'nationwide') : t(`w stanie ${loc(stateName(scope))}`, `in ${loc(stateName(scope))}`);
   return (
     <div className="action-card col">
       <div className="spread">
-        <b>💸 Wydatki kampanii</b>
-        <span className="tiny muted">{scope === 'national' ? 'cały kraj' : STATE_BY_CODE[scope].name}</span>
+        <b>💸 {t('Wydatki kampanii', 'Campaign spending')}</b>
+        <span className="tiny muted">{scope === 'national' ? t('cały kraj', 'national') : loc(stateName(scope))}</span>
       </div>
       <div className="segmented">
         {channels.map((c) => (
@@ -58,7 +60,7 @@ function MediaBuyForm({ scope }: { scope: string }) {
               if (c === 'canvass') setKind('positive');
             }}
           >
-            {c === 'tv' ? '📺 TV' : c === 'digital' ? '📱 Internet' : '🚪 Door-to-door'}
+            {c === 'tv' ? '📺 TV' : c === 'digital' ? `📱 ${t('Internet', 'Digital')}` : `🚪 ${t('Od drzwi do drzwi', 'Door-to-door')}`}
           </button>
         ))}
       </div>
@@ -66,7 +68,7 @@ function MediaBuyForm({ scope }: { scope: string }) {
         <div className="segmented">
           {(Object.keys(AD_KIND_LABEL) as AdKind[]).map((k) => (
             <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
-              {k === 'positive' ? 'Pozytywna' : k === 'attack' ? 'Atak' : 'Tematyczna'}
+              {k === 'positive' ? t('Pozytywna', 'Positive') : k === 'attack' ? t('Atak', 'Attack') : t('Tematyczna', 'Issue')}
             </button>
           ))}
         </div>
@@ -75,7 +77,7 @@ function MediaBuyForm({ scope }: { scope: string }) {
         <select className="select" value={target} onChange={(e) => setTarget(e.target.value)}>
           {rivals.map((r) => (
             <option key={r.id} value={r.id}>
-              Cel: {r.name}
+              {t('Cel', 'Target')}: {r.name}
             </option>
           ))}
         </select>
@@ -84,23 +86,23 @@ function MediaBuyForm({ scope }: { scope: string }) {
         <select className="select" value={issue} onChange={(e) => setIssue(e.target.value as IssueId)}>
           {ISSUES.map((i) => (
             <option key={i.id} value={i.id}>
-              {i.icon} {i.label}
+              {i.icon} {loc(i.label)}
             </option>
           ))}
         </select>
       )}
       <div className="col" style={{ gap: 4 }}>
         <div className="spread tiny">
-          <span className="muted">Budżet</span>
+          <span className="muted">{t('Budżet', 'Budget')}</span>
           <b className="mono" style={{ fontSize: 14 }}>
-            {fmtMoney(amount)}
+            {fmtMoney(amount, lang)}
           </b>
         </div>
         <input type="range" className="money-range" min={0.2} max={Math.max(1, Math.min(40, Math.floor(player.funds)))} step={0.1} value={Math.min(amount, Math.max(1, player.funds))} onChange={(e) => setAmount(Number(e.target.value))} />
         <div className="row wrap" style={{ gap: 4 }}>
           {AMOUNTS.map((a) => (
             <button key={a} className={`btn sm${Math.abs(amount - a) < 0.05 ? ' active' : ''}`} disabled={a > player.funds} onClick={() => setAmount(a)}>
-              ${a}M
+              {fmtMoney(a, lang)}
             </button>
           ))}
         </div>
@@ -109,25 +111,30 @@ function MediaBuyForm({ scope }: { scope: string }) {
         <div className="segmented">
           {[7, 14].map((d) => (
             <button key={d} className={days === d ? 'on' : ''} onClick={() => setDays(d)}>
-              {d} dni
+              {d} {t('dni', 'days')}
             </button>
           ))}
         </div>
         <div className="col" style={{ gap: 2, alignItems: 'flex-end' }}>
-          <span className="tiny muted">Siła oddziaływania</span>
+          <span className="tiny muted">{t('Siła oddziaływania', 'Impact')}</span>
           <EffectPips value={intensity / Math.max(0.01, ref)} />
         </div>
       </div>
       <div className="tiny muted">
-        {sat > 0.5 ? '⚠️ Rynek mocno nasycony — kolejne wydatki dadzą niewiele. ' : ''}
-        Efekt maleje z każdym kolejnym milionem ({(perMillion * 100).toFixed(0)} pkt/1 mln). {ch === 'canvass' ? 'Door-to-door głównie mobilizuje Twoich wyborców do pójścia na wybory.' : ch === 'digital' ? 'Internet trafia głównie do młodszych wyborców.' : 'Telewizja najlepiej trafia do starszych wyborców.'}
+        {sat > 0.5 ? t('⚠️ Rynek mocno nasycony — kolejne wydatki dadzą niewiele. ', '⚠️ Market heavily saturated — more spending will do little. ') : ''}
+        {t(`Efekt maleje z każdym kolejnym milionem (${(perMillion * 100).toFixed(0)} pkt/1 mln). `, `Each extra million has less effect (${(perMillion * 100).toFixed(0)} pts per $1M). `)}
+        {ch === 'canvass'
+          ? t('Agitacja od drzwi do drzwi głównie mobilizuje Twoich wyborców do pójścia na wybory.', 'Door-to-door mainly gets your own voters to turn out.')
+          : ch === 'digital'
+            ? t('Internet trafia głównie do młodszych wyborców.', 'Digital mostly reaches younger voters.')
+            : t('Telewizja najlepiej trafia do starszych wyborców.', 'TV works best with older voters.')}
       </div>
       <button
         className="btn primary"
         disabled={player.funds < amount}
         onClick={() => runMedia({ channel: ch, scope, kind: ch === 'canvass' ? 'positive' : kind, amount, days, targetId: kind === 'attack' ? target : undefined, issue: kind === 'issue' ? issue : undefined })}
       >
-        Wydaj {fmtMoney(amount)} {where}
+        {t('Wydaj', 'Spend')} {fmtMoney(amount, lang)} {where}
       </button>
     </div>
   );
@@ -149,16 +156,17 @@ function ScheduleButton({ kind, state, issue, disabledReason }: { kind: Schedule
   const player = useGame((s) => s.game!.candidates.find((c) => c.id === s.game!.playerId)!);
   const meta = SCHEDULE_META[kind];
   const full = player.schedule.length >= TUNING.maxScheduleLength;
+  const { t, loc, lang } = useT();
   return (
-    <button className="action-btn" disabled={full || !!disabledReason} onClick={() => schedule(kind, { state, issue })} title={disabledReason ?? meta.hint}>
+    <button className="action-btn" disabled={full || !!disabledReason} onClick={() => schedule(kind, { state, issue })} title={disabledReason ?? loc(meta.hint)}>
       <span className="action-icon">{meta.icon}</span>
       <span className="grow" style={{ textAlign: 'left' }}>
-        <span style={{ fontWeight: 700, display: 'block' }}>{meta.label}</span>
-        <span className="tiny muted">{meta.hint}</span>
+        <span style={{ fontWeight: 700, display: 'block' }}>{loc(meta.label)}</span>
+        <span className="tiny muted">{loc(meta.hint)}</span>
       </span>
       <span className="tiny muted mono" style={{ textAlign: 'right' }}>
-        {meta.cost > 0 && <div>{fmtMoney(meta.cost)}</div>}
-        {meta.stamina !== 0 && <div>{meta.stamina > 0 ? `-${meta.stamina}` : `+${-meta.stamina}`} kond.</div>}
+        {meta.cost > 0 && <div>{fmtMoney(meta.cost, lang)}</div>}
+        {meta.stamina !== 0 && <div>{meta.stamina > 0 ? `-${meta.stamina}` : `+${-meta.stamina}`} {t('kond.', 'stam.')}</div>}
       </span>
     </button>
   );
@@ -174,7 +182,15 @@ function StatePanel({ code }: { code: string }) {
   const prob = game.forecast?.stateWinProb[code];
   const rating = rateState(game, sup.estimate);
   const leadProb = prob ? Math.max(...Object.values(prob)) : 0.5;
-  const competitiveness = leadProb < 0.7 ? { t: 'bardzo wysoka', c: 'var(--accent)' } : leadProb < 0.85 ? { t: 'wysoka', c: 'var(--warn)' } : leadProb < 0.97 ? { t: 'umiarkowana', c: 'var(--text-2)' } : { t: 'niska', c: 'var(--muted)' };
+  const { t, loc, lang } = useT();
+  const competitiveness =
+    leadProb < 0.7
+      ? { t: t('bardzo wysoka', 'very high'), c: 'var(--accent)' }
+      : leadProb < 0.85
+        ? { t: t('wysoka', 'high'), c: 'var(--warn)' }
+        : leadProb < 0.97
+          ? { t: t('umiarkowana', 'moderate'), c: 'var(--text-2)' }
+          : { t: t('niska', 'low'), c: 'var(--muted)' };
   const avg = pollAverage(game, code, 21);
   const player = game.candidates.find((c) => c.id === game.playerId);
   const rt = game.states[code];
@@ -196,10 +212,10 @@ function StatePanel({ code }: { code: string }) {
         <div className="spread">
           <div>
             <div className="tiny muted display" style={{ letterSpacing: '0.1em' }}>
-              {REGION_LABEL[s.region]}
+              {loc(REGION_LABEL[s.region])}
             </div>
             <h2 className="display" style={{ fontSize: 28, lineHeight: 1.05 }}>
-              {s.name}
+              {loc(stateName(code))}
             </h2>
           </div>
           <button className="btn sm ghost" onClick={() => selectState(null)}>
@@ -207,19 +223,21 @@ function StatePanel({ code }: { code: string }) {
           </button>
         </div>
         <div className="row wrap" style={{ marginTop: 6 }}>
-          <span className="chip">{s.ev} głosów elektorskich</span>
-          <span className="chip" style={{ color: '#fff', background: RATING_COLORS[rating.key], borderColor: 'transparent' }}>
-            {rating.label}
+          <span className="chip">
+            {s.ev} {t('głosów elektorskich', 'electoral votes')}
           </span>
-          {l.margin < 0.06 && <span className="chip swing">SWING STATE</span>}
-          {s.districts && <span className="chip">Podział głosów wg okręgów</span>}
-          {DONOR_HUBS.has(code) && <span className="chip">💰 centrum darczyńców</span>}
+          <span className="chip" style={{ color: '#fff', background: RATING_COLORS[rating.key], borderColor: 'transparent' }}>
+            {loc(rating.label)}
+          </span>
+          {l.margin < 0.06 && <span className="chip swing">{t('STAN WAHAJĄCY SIĘ', 'SWING STATE')}</span>}
+          {s.districts && <span className="chip">{t('Podział głosów wg okręgów', 'Splits votes by district')}</span>}
+          {DONOR_HUBS.has(code) && <span className="chip">💰 {t('centrum darczyńców', 'donor hub')}</span>}
         </div>
       </div>
 
       <div className="section col">
         <div className="panel-title">
-          Poparcie (sondaże)
+          {t('Poparcie (sondaże)', 'Support (polls)')}
           <Sparkline values={trend} color={player?.color ?? game.candidates[0].color} width={70} height={18} />
         </div>
         {game.candidates.map((c) => {
@@ -230,7 +248,10 @@ function StatePanel({ code }: { code: string }) {
                 <span style={{ color: c.color, fontWeight: 700 }}>{c.name}</span>
                 <span className="mono">
                   <b>{v.toFixed(1)}%</b>
-                  {prob && <span className="muted"> · szansa {Math.round(prob[c.id] * 100)}%</span>}
+                  {prob && <span className="muted">
+                      {' '}
+                      · {t('szansa', 'chance')} {Math.round(prob[c.id] * 100)}%
+                    </span>}
                 </span>
               </div>
               <div className="bar" style={{ height: 8 }}>
@@ -240,52 +261,53 @@ function StatePanel({ code }: { code: string }) {
           );
         })}
         <div className="tiny muted">
-          Niezdecydowani {(sup.undecided * 100).toFixed(1)}% · {avg ? `średnia z ${avg.count} sondaży` : 'brak świeżych sondaży — estymacja modelu'}
+          {t('Niezdecydowani', 'Undecided')} {(sup.undecided * 100).toFixed(1)}% ·{' '}
+          {avg ? t(`średnia z ${avg.count} sondaży`, `average of ${avg.count} polls`) : t('brak świeżych sondaży — estymacja modelu', 'no recent polls — model estimate')}
         </div>
         <div className="state-kpis">
           <div>
-            <div className="tiny muted">Konkurencyjność</div>
+            <div className="tiny muted">{t('Konkurencyjność', 'Competitiveness')}</div>
             <b style={{ color: competitiveness.c }}>{competitiveness.t}</b>
           </div>
           <div>
-            <div className="tiny muted">Prognozowana frekwencja</div>
+            <div className="tiny muted">{t('Prognozowana frekwencja', 'Projected turnout')}</div>
             <b>{Math.round(sup.turnout * 100)}%</b> <span className="tiny muted">(2020: {Math.round(s.turnout * 100)}%)</span>
           </div>
         </div>
       </div>
 
       <div className="section col">
-        <div className="panel-title">Grupy wyborców</div>
+        <div className="panel-title">{t('Grupy wyborców', 'Voter groups')}</div>
         {STATE_GROUPS.map((g) => (
           <div key={g} className="group-row">
-            <span className="tiny ellipsis" title={GROUP_LABEL[g]}>
-              {GROUP_LABEL[g]}
+            <span className="tiny ellipsis" title={loc(GROUP_LABEL[g])}>
+              {loc(GROUP_LABEL[g])}
             </span>
             <div className="stack-bar">
               {game.candidates.map((c) => (
                 <div key={c.id} style={{ width: `${sup.groupsEst[g][c.id] * 100}%`, background: c.color }} title={`${c.name}: ${(sup.groupsEst[g][c.id] * 100).toFixed(0)}%`} />
               ))}
             </div>
-            <span className="tiny mono muted" style={{ width: 34, textAlign: 'right' }} title="Udział w elektoracie stanu">
+            <span className="tiny mono muted" style={{ width: 34, textAlign: 'right' }} title={t('Udział w elektoracie stanu', 'Share of the state electorate')}>
               {Math.round(sup.groups[g].size * 100)}%
             </span>
           </div>
         ))}
-        <div className="tiny muted">Paski: poparcie w grupie · liczba: udział grupy wśród dorosłych mieszkańców.</div>
+        <div className="tiny muted">{t('Paski: poparcie w grupie · liczba: udział grupy wśród dorosłych mieszkańców.', 'Bars: support within the group · number: group share of adult residents.')}</div>
       </div>
 
       <div className="section col">
-        <div className="panel-title">Kluczowe tematy w stanie</div>
+        <div className="panel-title">{t('Kluczowe tematy w stanie', 'Key issues in the state')}</div>
         {topIssues.map((iss) => {
           const myPos = player?.positions[iss.id];
           const dist = myPos !== undefined ? Math.abs(myPos - ideals[iss.id]) : null;
           return (
             <div key={iss.id} className="spread small">
               <span>
-                {iss.icon} {iss.label}
+                {iss.icon} {loc(iss.label)}
               </span>
               {dist !== null ? (
-                <span className={`tiny ${dist < 25 ? 'good' : dist > 55 ? 'bad' : 'muted'}`}>{dist < 25 ? 'zgodne z Tobą' : dist > 55 ? 'daleko od Ciebie' : 'częściowo zgodne'}</span>
+                <span className={`tiny ${dist < 25 ? 'good' : dist > 55 ? 'bad' : 'muted'}`}>{dist < 25 ? t('zgodne z Tobą', 'aligned with you') : dist > 55 ? t('daleko od Ciebie', 'far from you') : t('częściowo zgodne', 'partly aligned')}</span>
               ) : (
                 <span className="tiny muted">{(sal[iss.id] * 100).toFixed(0)}%</span>
               )}
@@ -295,25 +317,25 @@ function StatePanel({ code }: { code: string }) {
       </div>
 
       <div className="section col">
-        <div className="panel-title">Obecność kampanii</div>
+        <div className="panel-title">{t('Obecność kampanii', 'Campaign presence')}</div>
         {game.candidates.map((c) => (
           <div key={c.id} className="presence-row">
             <span className="ellipsis" style={{ color: c.color, width: 92 }}>
               {c.name.split(' ').slice(-1)[0]}
             </span>
-            <span className="tiny" title="Wiece i wizyty">
+            <span className="tiny" title={t('Wiece i wizyty', 'Rallies and visits')}>
               📣 {(rt.presence[c.id] ?? 0).toFixed(1)}
             </span>
-            <span className="tiny" title="Reklamy TV">
+            <span className="tiny" title={t('Reklamy TV', 'TV ads')}>
               📺 {(rt.ads[c.id] ?? 0).toFixed(1)}
             </span>
-            <span className="tiny" title="Kampania internetowa">
+            <span className="tiny" title={t('Kampania internetowa', 'Digital campaign')}>
               📱 {(rt.digital[c.id] ?? 0).toFixed(1)}
             </span>
-            <span className="tiny" title="Door-to-door">
+            <span className="tiny" title={t('Od drzwi do drzwi', 'Door-to-door')}>
               🚪 {(rt.canvass[c.id] ?? 0).toFixed(1)}
             </span>
-            <span className="tiny" title="Biura terenowe">
+            <span className="tiny" title={t('Biura terenowe', 'Field offices')}>
               🏢 {'●'.repeat(rt.offices[c.id] ?? 0)}
               <span className="muted">{'○'.repeat(TUNING.maxOffices - (rt.offices[c.id] ?? 0))}</span>
             </span>
@@ -324,9 +346,9 @@ function StatePanel({ code }: { code: string }) {
       {player && (
         <div className="section col">
           <div className="panel-title">
-            Działania w stanie
+            {t('Działania w stanie', 'State actions')}
             <span className="tiny muted" style={{ textTransform: 'none', letterSpacing: 0 }}>
-              podróż z {STATE_BY_CODE[player.location]?.code ?? '—'}: {fmtMoney(travelCost(player.location, code))}
+              {t('podróż z', 'travel from')} {STATE_BY_CODE[player.location]?.code ?? '—'}: {fmtMoney(travelCost(player.location, code), lang)}
             </span>
           </div>
           <ScheduleButton kind="rally" state={code} />
@@ -334,11 +356,13 @@ function StatePanel({ code }: { code: string }) {
           <ScheduleButton kind="fundraiser" state={code} />
           <div className="action-card spread">
             <div>
-              <b>🏢 Biuro terenowe</b>
-              <div className="tiny muted">Stała obecność + mobilizacja w dniu wyborów. Poziom {offices}/{TUNING.maxOffices}.</div>
+              <b>🏢 {t('Biuro terenowe', 'Field office')}</b>
+              <div className="tiny muted">
+                {t('Stała obecność + mobilizacja w dniu wyborów. Poziom', 'Permanent presence + Election Day turnout. Level')} {offices}/{TUNING.maxOffices}.
+              </div>
             </div>
             <button className="btn sm" disabled={offices >= TUNING.maxOffices || player.funds < officeCost(code)} onClick={() => buildOffice(code)}>
-              Otwórz · {fmtMoney(officeCost(code))}
+              {t('Otwórz', 'Open')} · {fmtMoney(officeCost(code), lang)}
             </button>
           </div>
           <MediaBuyForm scope={code} />
@@ -347,11 +371,11 @@ function StatePanel({ code }: { code: string }) {
 
       {recentPolls.length > 0 && (
         <div className="section col">
-          <div className="panel-title">Sondaże w stanie</div>
+          <div className="panel-title">{t('Sondaże w stanie', 'State polls')}</div>
           {recentPolls.map((p) => (
             <div key={p.id} className="spread tiny">
               <span className="muted">
-                {dayLabel(game, p.day)} · {p.pollster}
+                {dayLabel(game, p.day, false, lang)} · {p.pollster}
               </span>
               <span className="row" style={{ gap: 8 }}>
                 {game.candidates.map((c) => (
@@ -380,18 +404,19 @@ function NationalPanel() {
   const bg = battlegrounds(snap);
   const myAds = player ? game.ads.filter((a) => a.candId === player.id) : [];
   const nextDebate = game.debates.find((d) => !d.done);
+  const { t, loc, lang } = useT();
 
   return (
     <div className="col" style={{ gap: 0, height: '100%', overflow: 'auto' }}>
       {player ? (
         <div className="section col">
-          <div className="panel-title">Działania ogólnokrajowe</div>
-          <div className="tiny muted">Kliknij stan na mapie, aby zaplanować wiec, reklamę lub biuro terenowe.</div>
+          <div className="panel-title">{t('Działania ogólnokrajowe', 'National actions')}</div>
+          <div className="tiny muted">{t('Kliknij stan na mapie, aby zaplanować wiec, reklamę lub biuro terenowe.', 'Click a state on the map to schedule a rally, an ad or a field office.')}</div>
           <div className="row">
             <select className="select" value={issue} onChange={(e) => setIssue(e.target.value as IssueId)}>
               {ISSUES.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.icon} {i.label}
+                  {i.icon} {loc(i.label)}
                 </option>
               ))}
             </select>
@@ -399,21 +424,21 @@ function NationalPanel() {
           <ScheduleButton kind="speech" issue={issue} />
           <ScheduleButton kind="interview" />
           <ScheduleButton kind="socialBlitz" />
-          <ScheduleButton kind="debatePrep" disabledReason={nextDebate ? undefined : 'Brak zaplanowanych debat'} />
+          <ScheduleButton kind="debatePrep" disabledReason={nextDebate ? undefined : t('Brak zaplanowanych debat', 'No debates scheduled')} />
           <ScheduleButton kind="rest" />
           <MediaBuyForm scope="national" />
         </div>
       ) : (
         <div className="section col">
-          <div className="panel-title">Tryb obserwatora</div>
-          <div className="small text-2">Sztaby AI prowadzą kampanie. Kliknij stan, aby zobaczyć szczegóły.</div>
+          <div className="panel-title">{t('Tryb obserwatora', 'Spectator mode')}</div>
+          <div className="small text-2">{t('Sztaby AI prowadzą kampanie. Kliknij stan, aby zobaczyć szczegóły.', 'AI campaigns are running. Click a state to see details.')}</div>
         </div>
       )}
 
       {player && (
         <div className="section col">
           <div className="panel-title">
-            Przygotowanie do debaty
+            {t('Przygotowanie do debaty', 'Debate preparation')}
             <span className="mono tiny">{Math.round(player.debatePrep)}/100</span>
           </div>
           <div className="bar">
@@ -421,24 +446,26 @@ function NationalPanel() {
           </div>
           {nextDebate && (
             <div className="tiny muted">
-              {nextDebate.title}: {dayLabel(game, nextDebate.day)} (za {nextDebate.day - game.day} dni)
+              {loc(nextDebate.title)}: {dayLabel(game, nextDebate.day, false, lang)} ({t(`za ${nextDebate.day - game.day} dni`, `in ${nextDebate.day - game.day} days`)})
             </div>
           )}
         </div>
       )}
 
       <div className="section col">
-        <div className="panel-title">Pole bitwy — swing states</div>
-        {bg.length === 0 && <div className="tiny muted">Brak wyrównanych stanów.</div>}
+        <div className="panel-title">{t('Pole bitwy — stany wahające się', 'Battleground — swing states')}</div>
+        {bg.length === 0 && <div className="tiny muted">{t('Brak wyrównanych stanów.', 'No close states.')}</div>}
         {bg.map(({ s, l }) => (
           <button key={s.code} className="bg-row" onClick={() => selectState(s.code)}>
             <span className="bg-code display" style={{ background: candColor(game, l.id) }}>
               {s.code}
             </span>
             <span className="grow ellipsis" style={{ textAlign: 'left' }}>
-              {s.name}
+              {loc(stateName(s.code))}
             </span>
-            <span className="tiny muted">{s.ev} EV</span>
+            <span className="tiny muted">
+              {s.ev} {t('gł. el.', 'EV')}
+            </span>
             <span className="tiny mono" style={{ color: candColor(game, l.id), width: 44, textAlign: 'right' }}>
               +{(l.margin * 100).toFixed(1)}
             </span>
@@ -448,30 +475,32 @@ function NationalPanel() {
 
       {myAds.length > 0 && (
         <div className="section col">
-          <div className="panel-title">Twoje aktywne reklamy</div>
+          <div className="panel-title">{t('Twoje aktywne reklamy', 'Your active ads')}</div>
           {myAds.map((a) => (
             <div key={a.id} className="spread tiny">
               <span>
-                {a.channel === 'canvass' ? '🚪' : a.channel === 'digital' ? '📱' : a.kind === 'attack' ? '⚔️' : '📺'} {a.scope === 'national' ? 'Cały kraj' : STATE_BY_CODE[a.scope].name}
-                {a.issue ? ` · ${ISSUE_BY_ID[a.issue].short}` : ''}
+                {a.channel === 'canvass' ? '🚪' : a.channel === 'digital' ? '📱' : a.kind === 'attack' ? '⚔️' : '📺'} {a.scope === 'national' ? t('Cały kraj', 'National') : loc(stateName(a.scope))}
+                {a.issue ? ` · ${loc(ISSUE_BY_ID[a.issue].short)}` : ''}
               </span>
-              <span className="muted">{a.daysLeft} dni</span>
+              <span className="muted">
+                {a.daysLeft} {t('dni', 'days')}
+              </span>
             </div>
           ))}
         </div>
       )}
 
       <div className="section col">
-        <div className="panel-title">Debaty</div>
+        <div className="panel-title">{t('Debaty', 'Debates')}</div>
         {game.debates.map((d) => (
           <div key={d.id} className="spread small">
-            <span>{d.title}</span>
+            <span>{loc(d.title)}</span>
             {d.done ? (
               <span style={{ color: candColor(game, d.winner!) }}>
                 🏆 {game.candidates.find((c) => c.id === d.winner)?.name.split(' ').slice(-1)[0]} ({d.flashPoll?.[d.winner!]}%)
               </span>
             ) : (
-              <span className="tiny muted">{dayLabel(game, d.day)}</span>
+              <span className="tiny muted">{dayLabel(game, d.day, false, lang)}</span>
             )}
           </div>
         ))}

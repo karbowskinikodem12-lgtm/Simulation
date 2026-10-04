@@ -32,13 +32,6 @@ export function ratingOf(margin: number): Rating {
   return 'safe';
 }
 
-export const RATING_LABEL: Record<Rating, string> = {
-  tossup: 'Remis',
-  lean: 'Przechylony',
-  likely: 'Prawdopodobny',
-  safe: 'Pewny',
-};
-
 const RATING_MIX: Record<Rating, number> = { tossup: 0.28, lean: 0.52, likely: 0.76, safe: 1 };
 
 /** Fill for a state led by `color` with a given margin. */

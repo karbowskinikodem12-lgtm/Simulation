@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useGame } from './store/gameStore';
 import { MainMenu } from './ui/screens/MainMenu';
 import { SetupScreen } from './ui/screens/SetupScreen';
@@ -8,6 +9,12 @@ import { Toasts } from './ui/components/common';
 
 export function App() {
   const screen = useGame((s) => s.screen);
+  // Subscribing here re-renders the whole tree when the language changes.
+  const lang = useGame((s) => s.lang);
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.title = lang === 'pl' ? 'Road to 270 — Symulator Wyborów USA' : 'Road to 270 — US Election Simulator';
+  }, [lang]);
   return (
     <>
       {screen === 'menu' && <MainMenu />}

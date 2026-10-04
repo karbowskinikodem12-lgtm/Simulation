@@ -1,7 +1,8 @@
 // Pollsters sample the *estimated* electorate (true opinion + systemic polling error) with
 // sampling noise and house effects. The public — and the player — only ever see polls.
 
-import { STATES, STATE_BY_CODE } from '../data/states';
+import { STATES, stateName } from '../data/states';
+import { L, type LStr } from '../i18n';
 import { PARTIES } from '../data/parties';
 import type { GameState, Poll } from './types';
 import type { Rng } from './rng';
@@ -94,6 +95,7 @@ export function pollAverage(game: GameState, scope: string, windowDays = 14): { 
   return { results, undecided: und / wTotal, count: recent.length };
 }
 
-export function stateName(code: string) {
-  return code === 'national' ? 'Kraj' : STATE_BY_CODE[code]?.name ?? code;
+/** Localized name of a poll scope ('national' or a state code). */
+export function scopeName(code: string): LStr {
+  return code === 'national' ? L('Cały kraj', 'National') : stateName(code);
 }

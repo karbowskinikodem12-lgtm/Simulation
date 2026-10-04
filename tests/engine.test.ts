@@ -115,9 +115,10 @@ describe('v2 systems', () => {
     const g = makeGame(12, { three: true });
     simulateToEnd(g);
     expect(g.conventions.every((c) => c.done)).toBe(true);
-    expect(g.news.some((n) => n.headline.includes('wiceprezydenta'))).toBe(true);
+    expect(g.news.some((n) => n.headline.pl.includes('wiceprezydenta') && n.headline.en.includes('running mate'))).toBe(true);
     expect(g.debates.every((d) => d.done && d.report)).toBe(true);
-    expect(g.result!.analysis.summary.length).toBeGreaterThan(20);
+    expect(g.result!.analysis.summary.pl.length).toBeGreaterThan(20);
+    expect(g.result!.analysis.summary.en.length).toBeGreaterThan(20);
     expect(Object.keys(g.result!.groups).length).toBe(12);
   });
 

@@ -553,3 +553,38 @@ input[type='range']::-moz-range-thumb {
   box-shadow: var(--shadow);
   font-size: 12px;
 }
+
+/* Language switcher */
+.lang-switch {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: rgba(6, 12, 24, 0.7);
+}
+.lang-switch button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.lang-switch button.on {
+  background: var(--accent);
+  color: #1b1300;
+}
+.lang-switch.compact button {
+  padding: 3px 7px;
+  font-size: 11px;
+}
+.menu-lang {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 5;
+}

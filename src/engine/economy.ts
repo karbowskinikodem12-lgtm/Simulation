@@ -6,6 +6,7 @@ import type { Rng } from './rng';
 import { clamp } from './util';
 import { economyIndex } from './voterModel';
 import { pushNews } from './news';
+import { L, type LStr } from '../i18n';
 import { PARTIES } from '../data/parties';
 
 export function initialEconomy(rng: Rng): Economy {
@@ -57,15 +58,15 @@ function fedMeeting(game: GameState) {
   const step = target > e.rate + 0.2 ? 0.25 : target < e.rate - 0.2 ? -0.25 : 0;
   e.rate = Math.round((e.rate + step) * 100) / 100;
   if (step === 0) {
-    pushNews(game, `Fed pozostawia stopy procentowe bez zmian (${e.rate.toFixed(2)}%)`, { category: 'economy' });
+    pushNews(game, L(`Fed pozostawia stopy procentowe bez zmian (${e.rate.toFixed(2)}%)`, `The Fed holds interest rates steady (${e.rate.toFixed(2)}%)`), { category: 'economy' });
     return;
   }
   e.stocks *= step < 0 ? 1.012 : 0.99;
-  pushNews(game, `Fed ${step < 0 ? 'obniża' : 'podnosi'} stopy procentowe do ${e.rate.toFixed(2)}%`, {
+  pushNews(game, L(`Fed ${step < 0 ? 'obniża' : 'podnosi'} stopy procentowe do ${e.rate.toFixed(2)}%`, `The Fed ${step < 0 ? 'cuts' : 'raises'} interest rates to ${e.rate.toFixed(2)}%`), {
     category: 'economy',
     tone: step < 0 ? 'good' : 'bad',
     severity: 'moderate',
-    body: step < 0 ? 'Tańszy kredyt cieszy rynki i kupujących domy.' : 'Droższe kredyty hipoteczne uderzają w kieszenie rodzin.',
+    body: step < 0 ? L('Tańszy kredyt cieszy rynki i kupujących domy.', 'Cheaper credit cheers markets and home buyers.') : L('Droższe kredyty hipoteczne uderzają w kieszenie rodzin.', 'Pricier mortgages hit family budgets.'),
   });
 }
 
@@ -75,7 +76,8 @@ function marketMoves(game: GameState) {
   const prev = h[h.length - 2].stocks;
   const chg = (game.economy.stocks - prev) / prev;
   if (Math.abs(chg) < 0.022) return;
-  pushNews(game, `Wall Street: indeks ${chg > 0 ? 'rośnie' : 'spada'} o ${(Math.abs(chg) * 100).toFixed(1)}% w jeden dzień`, {
+  const pct = (Math.abs(chg) * 100).toFixed(1);
+  pushNews(game, L(`Wall Street: indeks ${chg > 0 ? 'rośnie' : 'spada'} o ${pct}% w jeden dzień`, `Wall Street: stocks ${chg > 0 ? 'jump' : 'drop'} ${pct}% in a single day`), {
     category: 'economy',
     tone: chg > 0 ? 'good' : 'bad',
   });
@@ -85,9 +87,9 @@ function monthAgo(game: GameState) {
   return game.econHistory[Math.max(0, game.econHistory.length - 31)];
 }
 
-function incumbentLabel(game: GameState) {
+function incumbentLabel(game: GameState): LStr {
   const p = game.settings.incumbentParty;
-  return p ? PARTIES[p].name : 'rządu';
+  return p ? PARTIES[p].name : L('rządu', 'the administration');
 }
 
 function jobsReport(game: GameState) {
@@ -97,17 +99,15 @@ function jobsReport(game: GameState) {
   const jobs = Math.round(180 - delta * 900 + (e.gdp - 2) * 40);
   const good = jobs > 150;
   game.salienceShock.jobs += good ? -0.05 : 0.18;
-  pushNews(
-    game,
-    `Raport z rynku pracy: ${jobs >= 0 ? '+' : ''}${jobs} tys. miejsc pracy, bezrobocie ${e.unemployment.toFixed(1)}%`,
-    {
-      tone: good ? 'good' : 'bad',
-      category: 'economy',
-      body: good
-        ? `Solidne dane wzmacniają argumenty ${incumbentLabel(game)}.`
-        : `Słabe dane to prezent dla opozycji — wyborcy coraz częściej wskazują pracę jako kluczowy problem.`,
-    },
-  );
+  const sign = jobs >= 0 ? '+' : '';
+  const inc = incumbentLabel(game);
+  pushNews(game, L(`Raport z rynku pracy: ${sign}${jobs} tys. miejsc pracy, bezrobocie ${e.unemployment.toFixed(1)}%`, `Jobs report: ${sign}${jobs}K jobs, unemployment at ${e.unemployment.toFixed(1)}%`), {
+    tone: good ? 'good' : 'bad',
+    category: 'economy',
+    body: good
+      ? L(`Solidne dane wzmacniają argumenty: ${inc.pl}.`, `Solid numbers strengthen the case for ${inc.en}.`)
+      : L('Słabe dane to prezent dla opozycji — wyborcy coraz częściej wskazują pracę jako kluczowy problem.', 'Weak numbers are a gift to the opposition — voters increasingly name jobs as a key issue.'),
+  });
 }
 
 function cpiReport(game: GameState) {
@@ -115,9 +115,10 @@ function cpiReport(game: GameState) {
   const e = game.economy;
   const rising = e.inflation > prev.inflation + 0.05;
   game.salienceShock.inflation += rising ? 0.2 : -0.06;
-  pushNews(game, `Inflacja CPI: ${e.inflation.toFixed(1)}% r/r ${rising ? '— ceny znów rosną' : '— presja cenowa słabnie'}`, {
+  const inf = e.inflation.toFixed(1);
+  pushNews(game, L(`Inflacja konsumencka: ${inf}% r/r ${rising ? '— ceny znów rosną' : '— presja cenowa słabnie'}`, `CPI inflation: ${inf}% y/y ${rising ? '— prices are rising again' : '— price pressure is easing'}`), {
     tone: rising ? 'bad' : 'good',
     category: 'economy',
-    body: `Benzyna kosztuje średnio $${e.gas.toFixed(2)} za galon.`,
+    body: L(`Benzyna kosztuje średnio $${e.gas.toFixed(2)} za galon.`, `Gas averages $${e.gas.toFixed(2)} a gallon.`),
   });
 }

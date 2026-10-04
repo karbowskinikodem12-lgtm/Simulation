@@ -4,6 +4,7 @@ import { ISSUE_BY_ID } from '../../data/issues';
 import { APPROACHES, DEBATE_ROUNDS, STRATEGIES, STRATEGY_META } from '../../engine/debate';
 import { issueEdge } from '../../engine/voterModel';
 import { Avatar, Modal } from '../components/common';
+import { useT } from '../../i18n/useT';
 
 export function DebateModal() {
   const game = useGame((s) => s.game)!;
@@ -18,16 +19,17 @@ export function DebateModal() {
   const edge = topic && game.playerId ? issueEdge(game, game.playerId, topic) : 0;
   const totalAll = parts.reduce((a, c) => a + Math.max(1, live.totals[c.id]), 0);
   const report = slot.report;
+  const { t, loc, q } = useT();
 
   return (
     <Modal wide>
       <div className="debate-stage">
         <div className="debate-header">
           <div className="tiny display" style={{ letterSpacing: '0.2em', color: 'var(--accent)' }}>
-            {live.stage === 'report' ? 'PO DEBACIE' : 'NA ŻYWO'}
+            {live.stage === 'report' ? t('PO DEBACIE', 'POST-DEBATE') : t('NA ŻYWO', 'LIVE')}
           </div>
           <h2 className="display" style={{ fontSize: 30 }}>
-            {slot.title}
+            {loc(slot.title)}
           </h2>
           {live.stage !== 'strategy' && (
             <div className="row" style={{ justifyContent: 'center', gap: 6 }}>
@@ -42,19 +44,19 @@ export function DebateModal() {
           <div className="col" style={{ gap: 12 }}>
             <div className="question-box">
               <div className="tiny display" style={{ letterSpacing: '0.12em', color: 'var(--accent)' }}>
-                Odprawa przed debatą
+                {t('Odprawa przed debatą', 'Pre-debate briefing')}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>Sztab czeka na decyzję: jaką strategię przyjmujesz na dzisiejszy wieczór?</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>{t('Sztab czeka na decyzję: jaką strategię przyjmujesz na dzisiejszy wieczór?', 'Your team is waiting: what is your strategy for tonight?')}</div>
               <div className="tiny muted" style={{ marginTop: 4 }}>
-                Spodziewane tematy: {live.topics.map((t) => `${ISSUE_BY_ID[t].icon} ${ISSUE_BY_ID[t].label}`).join(' · ')}
+                {t('Spodziewane tematy', 'Expected topics')}: {live.topics.map((tp) => `${ISSUE_BY_ID[tp].icon} ${loc(ISSUE_BY_ID[tp].label)}`).join(' · ')}
               </div>
             </div>
             <div className="strategy-cards">
               {STRATEGIES.map((st) => (
                 <button key={st} className="approach-btn" onClick={() => debateStrategy(st)}>
                   <div style={{ fontSize: 26 }}>{STRATEGY_META[st].icon}</div>
-                  <div style={{ fontWeight: 800 }}>{STRATEGY_META[st].label}</div>
-                  <div className="tiny muted">{STRATEGY_META[st].desc}</div>
+                  <div style={{ fontWeight: 800 }}>{loc(STRATEGY_META[st].label)}</div>
+                  <div className="tiny muted">{loc(STRATEGY_META[st].desc)}</div>
                 </button>
               ))}
             </div>
@@ -71,7 +73,7 @@ export function DebateModal() {
                   <Avatar name={c.name} color={c.color} size={64} />
                   <div style={{ fontWeight: 800, marginTop: 6 }}>{c.name}</div>
                   <div className="tiny muted">
-                    {strat && (c.isPlayer || live.stage === 'report') ? `${STRATEGY_META[strat].icon} ${STRATEGY_META[strat].label}` : `Przygotowanie ${Math.round(c.debatePrep)}/100`}
+                    {strat && (c.isPlayer || live.stage === 'report') ? `${STRATEGY_META[strat].icon} ${loc(STRATEGY_META[strat].label)}` : `${t('Przygotowanie', 'Preparation')} ${Math.round(c.debatePrep)}/100`}
                   </div>
                   {report ? (
                     <div className="grade display">{report.grades[c.id]}</div>
@@ -82,12 +84,15 @@ export function DebateModal() {
                   )}
                   {last && !report && (
                     <div className="tiny" style={{ marginTop: 6 }}>
-                      {APPROACH_META[last.picks[c.id]].icon} {APPROACH_META[last.picks[c.id]].label} · <b className="mono">{last.scores[c.id].toFixed(0)} pkt</b>
+                      {APPROACH_META[last.picks[c.id]].icon} {loc(APPROACH_META[last.picks[c.id]].label)} ·{' '}
+                      <b className="mono">
+                        {last.scores[c.id].toFixed(0)} {t('pkt', 'pts')}
+                      </b>
                     </div>
                   )}
                   {report && slot.flashPoll && (
                     <div className="small" style={{ marginTop: 4 }}>
-                      Sondaż po debacie: <b style={{ color: c.color }}>{slot.flashPoll[c.id]}%</b>
+                      {t('Sondaż po debacie', 'Post-debate poll')}: <b style={{ color: c.color }}>{slot.flashPoll[c.id]}%</b>
                     </div>
                   )}
                 </div>
@@ -100,7 +105,7 @@ export function DebateModal() {
           <div className="debate-commentary">
             {last.commentary.map((line, i) => (
               <div key={i} className="small">
-                🎙 {line}
+                🎙 {loc(line)}
               </div>
             ))}
           </div>
@@ -110,21 +115,25 @@ export function DebateModal() {
           <div className="col" style={{ gap: 10 }}>
             <div className="question-box">
               <div className="tiny display" style={{ letterSpacing: '0.12em', color: 'var(--accent)' }}>
-                Runda {live.round + 1} · {ISSUE_BY_ID[topic].icon} {ISSUE_BY_ID[topic].label}
+                {t('Runda', 'Round')} {live.round + 1} · {ISSUE_BY_ID[topic].icon} {loc(ISSUE_BY_ID[topic].label)}
               </div>
-              <div style={{ fontSize: 17, fontWeight: 600, marginTop: 4 }}>„{live.questions[live.round]}”</div>
+              <div style={{ fontSize: 17, fontWeight: 600, marginTop: 4 }}>{q(loc(live.questions[live.round]))}</div>
               <div className={`tiny ${edge > 0.1 ? 'good' : edge < -0.1 ? 'bad' : 'muted'}`} style={{ marginTop: 4 }}>
-                {edge > 0.1 ? 'Ten temat Ci sprzyja — Twoje stanowisko jest bliższe wyborcom.' : edge < -0.1 ? 'Trudny temat — większość wyborców myśli inaczej niż Ty. Rozważ unik.' : 'Temat neutralny dla Ciebie.'}
+                {edge > 0.1
+                  ? t('Ten temat Ci sprzyja — Twoje stanowisko jest bliższe wyborcom.', 'This topic favors you — your position is closer to voters.')
+                  : edge < -0.1
+                    ? t('Trudny temat — większość wyborców myśli inaczej niż Ty. Rozważ unik.', 'Tough topic — most voters disagree with you. Consider a pivot.')
+                    : t('Temat neutralny dla Ciebie.', 'A neutral topic for you.')}
               </div>
             </div>
             <div className="approach-grid">
               {APPROACHES.map((a) => (
                 <button key={a} className="approach-btn" onClick={() => debatePick(a)}>
                   <div style={{ fontSize: 26 }}>{APPROACH_META[a].icon}</div>
-                  <div style={{ fontWeight: 800 }}>{APPROACH_META[a].label}</div>
-                  <div className="tiny muted">{APPROACH_META[a].desc}</div>
+                  <div style={{ fontWeight: 800 }}>{loc(APPROACH_META[a].label)}</div>
+                  <div className="tiny muted">{loc(APPROACH_META[a].desc)}</div>
                   <div className="tiny" style={{ color: 'var(--accent-2)', marginTop: 4 }}>
-                    Kontruje: {APPROACH_META[APPROACH_META[a].beats].label}
+                    {t('Kontruje', 'Counters')}: {loc(APPROACH_META[APPROACH_META[a].beats].label)}
                   </div>
                 </button>
               ))}
@@ -135,10 +144,10 @@ export function DebateModal() {
         {live.stage === 'rounds' && roundsDone && (
           <div className="col" style={{ alignItems: 'center', gap: 12 }}>
             <div className="display" style={{ fontSize: 22 }}>
-              Koniec debaty
+              {t('Koniec debaty', 'The debate is over')}
             </div>
             <button className="btn primary lg" onClick={debateFinish}>
-              Zobacz oceny, reakcje mediów i sondaż →
+              {t('Zobacz oceny, reakcje mediów i sondaż →', 'See grades, media reaction and the poll →')}
             </button>
           </div>
         )}
@@ -147,40 +156,40 @@ export function DebateModal() {
           <div className="col" style={{ gap: 12 }}>
             <div className="report-grid">
               <div className="col" style={{ gap: 6 }}>
-                <div className="panel-title">Reakcje mediów</div>
+                <div className="panel-title">{t('Reakcje mediów', 'Media reaction')}</div>
                 {report.headlines.map((h) => (
                   <div key={h.outlet} className="headline-card" style={{ borderLeftColor: h.lean > 0 ? '#ef4444' : h.lean < 0 ? '#3b82f6' : 'var(--accent)' }}>
                     <div className="tiny muted display" style={{ letterSpacing: '0.08em' }}>
                       {h.outlet}
                     </div>
                     <div className="small" style={{ fontWeight: 700 }}>
-                      {h.text}
+                      {loc(h.text)}
                     </div>
                   </div>
                 ))}
               </div>
               <div className="col" style={{ gap: 6 }}>
-                <div className="panel-title">Wpływ na kampanię</div>
+                <div className="panel-title">{t('Wpływ na kampanię', 'Campaign impact')}</div>
                 {game.candidates.map((c) => (
                   <div key={c.id} className="impact-row">
                     <span style={{ color: c.color, fontWeight: 700 }} className="ellipsis">
                       {c.name}
                     </span>
-                    <span className={`mono small ${report.pollShift[c.id] >= 0 ? 'good' : 'bad'}`} title="Zmiana w średniej krajowej">
-                      {report.pollShift[c.id] >= 0 ? '▲' : '▼'} {Math.abs(report.pollShift[c.id]).toFixed(1)} pkt
+                    <span className={`mono small ${report.pollShift[c.id] >= 0 ? 'good' : 'bad'}`} title={t('Zmiana w średniej krajowej', 'Change in the national average')}>
+                      {report.pollShift[c.id] >= 0 ? '▲' : '▼'} {Math.abs(report.pollShift[c.id]).toFixed(1)} {t('pkt', 'pts')}
                     </span>
-                    <span className={`mono small ${report.momentumShift[c.id] >= 0 ? 'good' : 'bad'}`} title="Zmiana momentum">
+                    <span className={`mono small ${report.momentumShift[c.id] >= 0 ? 'good' : 'bad'}`} title={t('Zmiana impetu', 'Momentum change')}>
                       🚀 {report.momentumShift[c.id] >= 0 ? '+' : ''}
                       {(report.momentumShift[c.id] * 100).toFixed(0)}
                     </span>
                   </div>
                 ))}
-                <div className="tiny muted">Pełny efekt w sondażach pojawi się w ciągu kilku dni — momentum stopniowo wygasa.</div>
+                <div className="tiny muted">{t('Pełny efekt w sondażach pojawi się w ciągu kilku dni — impet stopniowo wygasa.', 'The full effect will show in polls over the next few days — momentum fades gradually.')}</div>
               </div>
             </div>
             <div className="row" style={{ justifyContent: 'center' }}>
               <button className="btn primary lg" onClick={debateClose}>
-                Wróć do kampanii →
+                {t('Wróć do kampanii →', 'Back to the campaign →')}
               </button>
             </div>
           </div>

@@ -1,3 +1,5 @@
+import type { LStr } from '../i18n';
+
 // Core data model. All game state is plain, JSON-serialisable data so it can be
 // cloned each tick, saved to localStorage and inspected in tests.
 
@@ -198,8 +200,8 @@ export type NewsTone = 'good' | 'bad' | 'neutral' | 'breaking';
 export interface NewsItem {
   id: string;
   day: number;
-  headline: string;
-  body?: string;
+  headline: LStr;
+  body?: LStr;
   tone: NewsTone;
   candId?: string;
   category: string;
@@ -210,7 +212,7 @@ export type Severity = 'minor' | 'moderate' | 'major';
 
 export interface KeyEvent {
   day: number;
-  text: string;
+  text: LStr;
   candId?: string;
   impact: number; // signed magnitude for the candidate
 }
@@ -232,16 +234,16 @@ export type DebateApproach = 'facts' | 'attack' | 'empathy' | 'pivot';
 
 export interface DebateRound {
   issue: IssueId;
-  question: string;
+  question: LStr;
   picks: Record<string, DebateApproach>;
   scores: Record<string, number>;
-  commentary: string[];
+  commentary: LStr[];
 }
 
 export interface DebateSlot {
   id: string;
   day: number;
-  title: string;
+  title: LStr;
   done: boolean;
   participants?: string[];
   winner?: string;
@@ -255,7 +257,7 @@ export interface DebateReport {
   grades: Record<string, string>;
   scores: Record<string, number>;
   strategies: Record<string, DebateStrategy>;
-  headlines: { outlet: string; text: string; lean: number }[];
+  headlines: { outlet: string; text: LStr; lean: number }[];
   pollShift: Record<string, number>; // pp change in national estimate
   momentumShift: Record<string, number>;
 }
@@ -264,7 +266,7 @@ export interface LiveDebate {
   slotId: string;
   participants: string[];
   topics: IssueId[];
-  questions: string[];
+  questions: LStr[];
   round: number;
   rounds: DebateRound[];
   totals: Record<string, number>;
@@ -336,12 +338,12 @@ export interface ElectionResult {
 }
 
 export interface Analysis {
-  headline: string;
-  reasons: string[];
-  caveats: string[];
-  factors: { label: string; value: number }[]; // winner minus runner-up utility contributions
+  headline: LStr;
+  reasons: LStr[];
+  caveats: LStr[];
+  factors: { label: LStr; value: number }[]; // winner minus runner-up utility contributions
   tippingPoint?: string;
-  summary: string;
+  summary: LStr;
   swingStates: string[];
 }
 

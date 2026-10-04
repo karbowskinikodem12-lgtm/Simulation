@@ -5,6 +5,7 @@ import { APPROACH_META, DEBATE_QUESTIONS, ROUND_COMMENTARY } from '../data/debat
 import { ISSUE_BY_ID, ISSUE_IDS } from '../data/issues';
 import type { DebateApproach, DebateReport, DebateRound, DebateSlot, DebateStrategy, GameState, IssueId, LiveDebate } from './types';
 import { PARTIES } from '../data/parties';
+import { bi, fmt, L, quote, type LStr } from '../i18n';
 import type { Rng } from './rng';
 import { clamp, softmax } from './util';
 import { computeSnapshot, issueEdge, nationalSalience } from './voterModel';
@@ -13,12 +14,12 @@ import { pushKeyEvent, pushNews } from './news';
 export const DEBATE_ROUNDS = 4;
 export const APPROACHES: DebateApproach[] = ['facts', 'attack', 'empathy', 'pivot'];
 
-export const STRATEGY_META: Record<DebateStrategy, { label: string; icon: string; desc: string }> = {
-  attack: { label: 'Atakować przeciwnika', icon: '⚔️', desc: 'Premia do ataków, rywal traci na wizerunku. Przy niskiej wiarygodności grozi efekt bumerangu.' },
-  economy: { label: 'Skupić się na gospodarce', icon: '📈', desc: 'Silniejszy w rundach o gospodarce, inflacji, pracy i podatkach; słabszy w pozostałych.' },
-  security: { label: 'Skupić się na bezpieczeństwie', icon: '🛡️', desc: 'Silniejszy w rundach o bezpieczeństwie, imigracji i polityce zagranicznej.' },
-  positive: { label: 'Pozytywny przekaz', icon: '☀️', desc: 'Premia do empatii, lepszy wizerunek po debacie, mniejsze straty przy porażce.' },
-  counter: { label: 'Odpierać ataki', icon: '🥊', desc: 'Duża premia, gdy rywal atakuje; zyskujesz wizerunek, jeśli rywal wybrał strategię ataku.' },
+export const STRATEGY_META: Record<DebateStrategy, { label: LStr; icon: string; desc: LStr }> = {
+  attack: { label: L('Atakować przeciwnika', 'Attack the opponent'), icon: '⚔️', desc: L('Premia do ataków, rywal traci na wizerunku. Przy niskiej wiarygodności grozi efekt bumerangu.', 'Bonus to attacks, the rival’s image suffers. With low credibility it may backfire.') },
+  economy: { label: L('Skupić się na gospodarce', 'Focus on the economy'), icon: '📈', desc: L('Silniejszy w rundach o gospodarce, inflacji, pracy i podatkach; słabszy w pozostałych.', 'Stronger in rounds on the economy, inflation, jobs and taxes; weaker in others.') },
+  security: { label: L('Skupić się na bezpieczeństwie', 'Focus on security'), icon: '🛡️', desc: L('Silniejszy w rundach o bezpieczeństwie, imigracji i polityce zagranicznej.', 'Stronger in rounds on crime, immigration and foreign policy.') },
+  positive: { label: L('Pozytywny przekaz', 'Positive message'), icon: '☀️', desc: L('Premia do empatii, lepszy wizerunek po debacie, mniejsze straty przy porażce.', 'Bonus to empathy, a better image afterwards, smaller losses if you lose.') },
+  counter: { label: L('Odpierać ataki', 'Counter attacks'), icon: '🥊', desc: L('Duża premia, gdy rywal atakuje; zyskujesz wizerunek, jeśli rywal wybrał strategię ataku.', 'Big bonus when the rival attacks; your image improves if the rival chose to attack.') },
 };
 export const STRATEGIES = Object.keys(STRATEGY_META) as DebateStrategy[];
 
@@ -53,7 +54,7 @@ export function aiStrategy(game: GameState, candId: string, rng: Rng): DebateStr
 }
 
 export function scheduleDebates(totalDays: number): DebateSlot[] {
-  const titles = ['I debata prezydencka', 'II debata prezydencka', 'III debata prezydencka'];
+  const titles = [L('I debata prezydencka', 'First presidential debate'), L('II debata prezydencka', 'Second presidential debate'), L('III debata prezydencka', 'Third presidential debate')];
   return [0.46, 0.61, 0.76].map((f, i) => ({ id: `debate${i + 1}`, day: Math.round(totalDays * f), title: titles[i], done: false }));
 }
 
@@ -170,7 +171,7 @@ export function playRound(game: GameState, live: LiveDebate, picks: Record<strin
   const commentary = live.participants.map((id) => {
     const c = game.candidates.find((x) => x.id === id)!;
     const bank = ROUND_COMMENTARY[picks[id]][scores[id] >= mean ? 'good' : 'bad'];
-    return rng.pick(bank).replaceAll('{name}', c.name);
+    return fmt(rng.pick(bank), { name: c.name });
   });
   const round: DebateRound = { issue, question: live.questions[live.round], picks, scores, commentary };
   for (const id of live.participants) live.totals[id] += scores[id];
@@ -202,15 +203,18 @@ function headlines(game: GameState, live: LiveDebate, avg: Record<string, number
     const l = judged[1].id;
     const gap = judged[0].v - judged[1].v;
     const strat = live.strategies[w];
-    let text: string;
-    if (o.name === 'TrendTok News') text = rng.pick([`Internet ogłasza zwycięzcę: ${name(w)} — #debata na szczycie trendów`, `Najczęściej udostępniany fragment debaty należy do ${name(w)}`]);
-    else if (gap > 9) text = rng.pick([`${name(w)} dominuje w debacie, ${name(l)} w defensywie`, `Nokaut: ${name(w)} bezapelacyjnie wygrywa starcie`]);
-    else if (gap < 3) text = `Wyrównana debata, minimalna przewaga ${name(w)}`;
-    else if (strat === 'attack') text = `Ostre starcie: ${name(w)} punktuje ${name(l)}`;
-    else if (strat === 'economy') text = `${name(w)} przekonuje w sprawach gospodarki`;
-    else if (strat === 'security') text = `${name(w)} pewniej w tematach bezpieczeństwa`;
-    else if (strat === 'positive') text = `Optymistyczny przekaz ${name(w)} trafia do widzów`;
-    else text = `${name(w)} skutecznie odpiera ataki rywala`;
+    const W = name(w);
+    const Lo = name(l);
+    let text: LStr;
+    if (o.name === 'TrendTok News')
+      text = rng.pick([L(`Internet ogłasza zwycięzcę: ${W} — #debata na szczycie trendów`, `The internet has spoken: ${W} wins — #debate is trending`), L(`Najczęściej udostępniany fragment debaty należy do ${W}`, `The most-shared clip of the night belongs to ${W}`)]);
+    else if (gap > 9) text = rng.pick([L(`${W} dominuje w debacie, ${Lo} w defensywie`, `${W} dominates the debate, ${Lo} on the defensive`), L(`Nokaut: ${W} bezapelacyjnie wygrywa starcie`, `Knockout: ${W} wins decisively`)]);
+    else if (gap < 3) text = L(`Wyrównana debata, minimalna przewaga ${W}`, `A close debate with a slight edge to ${W}`);
+    else if (strat === 'attack') text = L(`Ostre starcie: ${W} punktuje ${Lo}`, `Fiery clash: ${W} lands blows on ${Lo}`);
+    else if (strat === 'economy') text = L(`${W} przekonuje w sprawach gospodarki`, `${W} wins the argument on the economy`);
+    else if (strat === 'security') text = L(`${W} pewniej w tematach bezpieczeństwa`, `${W} more confident on security`);
+    else if (strat === 'positive') text = L(`Optymistyczny przekaz ${W} trafia do widzów`, `${W}’s upbeat message resonates with viewers`);
+    else text = L(`${W} skutecznie odpiera ataki rywala`, `${W} effectively parries the rival’s attacks`);
     return { outlet: o.name, text, lean: o.lean };
   });
 }
@@ -270,15 +274,17 @@ export function finishDebate(game: GameState, live: LiveDebate, rng: Rng) {
   live.stage = 'report';
   const wName = game.candidates.find((c) => c.id === winner)!.name;
   const pollTxt = ids.map((id) => `${game.candidates.find((c) => c.id === id)!.name} ${flashPoll[id]}%`).join(' · ');
-  pushNews(game, `${slot.title}: wygrywa ${wName} według błyskawicznego sondażu (${pollTxt})`, {
+  const h0 = report.headlines[0];
+  pushNews(game, L(`${slot.title.pl}: wygrywa ${wName} według błyskawicznego sondażu (${pollTxt})`, `${slot.title.en}: ${wName} wins according to the flash poll (${pollTxt})`), {
     tone: 'breaking',
     candId: winner,
     category: 'debate',
-    body: `Tematy: ${live.topics.map((t) => ISSUE_BY_ID[t].label).join(', ')}. ${report.headlines[0].outlet}: „${report.headlines[0].text}”.`,
+    body: bi((l) => `${l === 'pl' ? 'Tematy' : 'Topics'}: ${live.topics.map((t) => ISSUE_BY_ID[t].label[l]).join(', ')}. ${h0.outlet}: ${quote(h0.text[l], l)}.`),
   });
-  pushKeyEvent(game, { text: `${slot.title} — zwycięstwo ${wName} (${flashPoll[winner]}%)`, candId: winner, impact: (flashPoll[winner] - 100 / n) / 5 });
+  pushKeyEvent(game, { text: L(`${slot.title.pl} — zwycięstwo ${wName} (${flashPoll[winner]}%)`, `${slot.title.en} — won by ${wName} (${flashPoll[winner]}%)`), candId: winner, impact: (flashPoll[winner] - 100 / n) / 5 });
   const excluded = game.candidates.filter((c) => !ids.includes(c.id));
-  if (excluded.length) pushNews(game, `${excluded.map((c) => c.name).join(', ')} poza debatą — próg 15% nieosiągnięty`, { tone: 'bad', category: 'debate' });
+  const exNames = excluded.map((c) => c.name).join(', ');
+  if (excluded.length) pushNews(game, L(`${exNames} poza debatą — próg 15% nieosiągnięty`, `${exNames} left out of the debate — below the 15% threshold`), { tone: 'bad', category: 'debate' });
 }
 
 /** Debates without the player are simulated instantly. */

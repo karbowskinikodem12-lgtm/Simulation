@@ -8,6 +8,7 @@ import { leaderOf } from '../engine/voterModel';
 import { NEUTRAL, heatFill, marginFill, mix } from './colors';
 import type { MapMode } from '../store/gameStore';
 import { dateForDay } from '../engine/setup';
+import { getLang, MONTHS, WEEKDAYS, type Lang } from '../i18n';
 
 export function candColor(game: GameState, id: string) {
   return game.candidates.find((c) => c.id === id)?.color ?? '#888';
@@ -41,13 +42,12 @@ export function mapFills(game: GameState, snap: Snapshot, mode: MapMode): Record
   return fills;
 }
 
-const MONTHS = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
-const DAYS = ['niedz.', 'pon.', 'wt.', 'śr.', 'czw.', 'pt.', 'sob.'];
-
-export function dayLabel(game: GameState, day: number, withWeekday = false) {
+export function dayLabel(game: GameState, day: number, withWeekday = false, lang: Lang = getLang()) {
   const d = dateForDay(game, day);
-  const base = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
-  return withWeekday ? `${DAYS[d.getUTCDay()]} ${base} ${d.getUTCFullYear()}` : base;
+  const m = MONTHS[lang][d.getUTCMonth()];
+  const base = lang === 'pl' ? `${d.getUTCDate()} ${m}` : `${m} ${d.getUTCDate()}`;
+  if (!withWeekday) return base;
+  return lang === 'pl' ? `${WEEKDAYS.pl[d.getUTCDay()]} ${base} ${d.getUTCFullYear()}` : `${WEEKDAYS.en[d.getUTCDay()]}, ${base}, ${d.getUTCFullYear()}`;
 }
 
 /** National estimate change over the last `days` days (percentage points). */

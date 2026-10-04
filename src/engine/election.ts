@@ -10,6 +10,7 @@ import type { Rng } from './rng';
 import { clamp } from './util';
 import { computeSnapshot, type Snapshot } from './voterModel';
 import { analyzeResult } from './analysis';
+import { same } from '../i18n';
 
 /** Bank one day of early votes at current (likely-voter) opinion. */
 export function bankEarlyVotes(game: GameState, snap: Snapshot) {
@@ -120,7 +121,7 @@ export function computeElection(game: GameState, rng: Rng): ElectionResult {
     turnout: totalVotes / totalVep,
     totalVotes,
     groups: snap.groups,
-    analysis: { headline: '', reasons: [], caveats: [], factors: [], summary: '', swingStates: [] },
+    analysis: { headline: same(''), reasons: [], caveats: [], factors: [], summary: same(''), swingStates: [] },
   };
   result.analysis = analyzeResult(game, result, snap);
   return result;

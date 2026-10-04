@@ -7,6 +7,7 @@ import { createGame, GAME_VERSION } from '../engine/setup';
 import { advanceDay, chooseDebateStrategy, chooseEventOption, concludeDebate, playDebateRound } from '../engine/simulation';
 import { addToSchedule, buyMedia, openOffice, removeFromSchedule, type MediaBuy } from '../engine/actions';
 import { computeSnapshot, type Snapshot } from '../engine/voterModel';
+import { getLang, L, setLangGlobal, type Lang, type Text } from '../i18n';
 
 export type Screen = 'menu' | 'setup' | 'campaign' | 'election' | 'results';
 export type MapMode = 'projection' | 'winprob' | 'presence' | 'lean';
@@ -15,7 +16,7 @@ export type LeftTab = 'overview' | 'polls' | 'media' | 'economy' | 'finance';
 
 export interface Toast {
   id: number;
-  text: string;
+  text: Text;
   kind: 'ok' | 'err' | 'info';
 }
 
@@ -35,6 +36,7 @@ interface Store {
   /** Major news item currently shown as a full-width "BREAKING" banner. */
   breaking: NewsItem | null;
   lastNewsId: string | null;
+  lang: Lang;
 
   setScreen(s: Screen): void;
   newGame(setups: CandidateSetup[], settings: GameSettings): void;
@@ -44,7 +46,8 @@ interface Store {
   setMapMode(m: MapMode): void;
   toggleLog(v?: boolean): void;
   toggleHelp(v?: boolean): void;
-  toast(text: string, kind?: Toast['kind']): void;
+  toast(text: Text, kind?: Toast['kind']): void;
+  setLang(lang: Lang): void;
   setLeftTab(t: LeftTab): void;
   dismissBreaking(): void;
 
@@ -87,7 +90,7 @@ export const useGame = create<Store>((set, get) => {
     return out;
   }
 
-  function report(err: string | null | undefined, ok: string) {
+  function report(err: Text | null | undefined, ok: Text) {
     if (err) get().toast(err, 'err');
     else get().toast(ok, 'ok');
   }
@@ -105,6 +108,7 @@ export const useGame = create<Store>((set, get) => {
     leftTab: 'overview',
     breaking: null,
     lastNewsId: null,
+    lang: getLang(),
 
     setScreen: (screen) => set({ screen }),
 
@@ -137,6 +141,10 @@ export const useGame = create<Store>((set, get) => {
 
     setSpeed: (speed) => set({ speed }),
     setLeftTab: (leftTab) => set({ leftTab }),
+    setLang(lang) {
+      setLangGlobal(lang);
+      set({ lang });
+    },
     dismissBreaking: () => set({ breaking: null }),
     selectState: (selectedState) => set({ selectedState }),
     setMapMode: (mapMode) => set({ mapMode }),
@@ -153,7 +161,7 @@ export const useGame = create<Store>((set, get) => {
       const pid = get().game?.playerId;
       if (!pid) return;
       const err = mutate((g) => addToSchedule(g, pid, kind, opts));
-      report(err, 'Dodano do harmonogramu');
+      report(err, L('Dodano do harmonogramu', 'Added to the schedule'));
     },
 
     unschedule(actionId) {
@@ -166,7 +174,7 @@ export const useGame = create<Store>((set, get) => {
       const pid = get().game?.playerId;
       if (!pid) return false;
       const err = mutate((g) => buyMedia(g, pid, buy));
-      report(err, buy.channel === 'canvass' ? 'Program door-to-door ruszył' : 'Kampania reklamowa wystartowała');
+      report(err, buy.channel === 'canvass' ? L('Ruszyła agitacja od drzwi do drzwi', 'Door-to-door program launched') : L('Kampania reklamowa wystartowała', 'Ad campaign launched'));
       return !err;
     },
 
@@ -186,7 +194,7 @@ export const useGame = create<Store>((set, get) => {
       const pid = get().game?.playerId;
       if (!pid) return;
       const err = mutate((g) => openOffice(g, pid, code));
-      report(err, 'Otwarto biuro terenowe');
+      report(err, L('Otwarto biuro terenowe', 'Field office opened'));
     },
 
     chooseEvent(i) {
@@ -229,7 +237,7 @@ export const useGame = create<Store>((set, get) => {
         if (!raw) return false;
         const game = JSON.parse(raw) as GameState;
         if (game.version !== GAME_VERSION) {
-          get().toast('Zapis pochodzi z poprzedniej wersji gry — rozpocznij nową kampanię', 'err');
+          get().toast(L('Zapis pochodzi z poprzedniej wersji gry — rozpocznij nową kampanię', 'This save is from an older version of the game — please start a new campaign'), 'err');
           return false;
         }
         const screen: Screen = game.phase === 'campaign' ? 'campaign' : 'results';
@@ -244,7 +252,7 @@ export const useGame = create<Store>((set, get) => {
       const g = get().game;
       if (g) {
         persist(g);
-        get().toast('Gra zapisana', 'ok');
+        get().toast(L('Gra zapisana', 'Game saved'), 'ok');
       }
     },
 

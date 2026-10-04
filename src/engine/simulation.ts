@@ -19,6 +19,7 @@ import { bankEarlyVotes, computeElection } from './election';
 import { releasePolls } from './polls';
 import { runForecast } from './forecast';
 import { pushNews } from './news';
+import { bi, L } from '../i18n';
 
 /** Is the game waiting on a player decision? */
 export function isBlocked(game: GameState): boolean {
@@ -140,7 +141,7 @@ function runDebateIfDue(game: GameState, rng: Rng) {
   const participants = startDebate(game, slot, rng);
   if (game.playerId && participants.participants.includes(game.playerId)) {
     game.liveDebate = participants;
-    pushNews(game, `Dziś wieczorem: ${slot.title}`, { tone: 'breaking', category: 'debate' });
+    pushNews(game, bi((l) => `${l === 'pl' ? 'Dziś wieczorem' : 'Tonight'}: ${slot.title[l]}`), { tone: 'breaking', category: 'debate' });
   } else {
     autoDebate(game, slot, rng);
   }
@@ -176,7 +177,7 @@ export function advanceDay(game: GameState) {
 
   snap = computeSnapshot(game);
   if (daysLeft < TUNING.earlyVotingDays) {
-    if (daysLeft === TUNING.earlyVotingDays - 1) pushNews(game, 'Rusza głosowanie przedterminowe i korespondencyjne w większości stanów', { tone: 'breaking', category: 'campaign' });
+    if (daysLeft === TUNING.earlyVotingDays - 1) pushNews(game, L('Rusza głosowanie przedterminowe i korespondencyjne w większości stanów', 'Early in-person and mail voting begins in most states'), { tone: 'breaking', category: 'campaign' });
     bankEarlyVotes(game, snap);
   }
   releasePolls(game, snap, rng);
@@ -196,7 +197,8 @@ function milestoneNews(game: GameState, snap: Snapshot) {
   if (game.day % 10 !== 0) return;
   const lead = leaderOf(snap.national);
   const c = game.candidates.find((x) => x.id === lead.id)!;
-  pushNews(game, `Średnia sondaży: ${c.name} prowadzi o ${(lead.margin * 100).toFixed(1)} pkt proc.`, { category: 'polls', candId: c.id });
+  const m = (lead.margin * 100).toFixed(1);
+  pushNews(game, L(`Średnia sondaży: ${c.name} prowadzi o ${m} pkt proc.`, `Polling average: ${c.name} leads by ${m} points`), { category: 'polls', candId: c.id });
 }
 
 // ---- player decisions that need the RNG ----

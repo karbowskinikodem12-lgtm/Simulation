@@ -1,6 +1,7 @@
 import type { Candidate } from '../../engine/types';
 import { EV_TO_WIN, TOTAL_EV } from '../../data/states';
 import { alpha } from '../colors';
+import { useT } from '../../i18n/useT';
 
 interface Props {
   candidates: Candidate[];
@@ -14,6 +15,7 @@ interface Props {
 /** Stacked electoral-vote bar: first candidate from the left, second from the right, others in between. */
 export function EVBar({ candidates, ev, lean, height = 26, labels = true }: Props) {
   const [a, b, ...rest] = candidates;
+  const { t } = useT();
   const pct = (v: number) => `${(v / TOTAL_EV) * 100}%`;
   const assigned = candidates.reduce((s, c) => s + (ev[c.id] ?? 0) + (lean?.[c.id] ?? 0), 0);
   const middle = TOTAL_EV - assigned;
@@ -28,9 +30,9 @@ export function EVBar({ candidates, ev, lean, height = 26, labels = true }: Prop
             <span className="small text-2">{a.name}</span>
           </div>
           <div className="center tiny muted display" style={{ letterSpacing: '0.12em' }}>
-            <span style={{ color: 'var(--accent)', fontSize: 15, fontWeight: 800 }}>{EV_TO_WIN} TO WIN</span>
+            <span style={{ color: 'var(--accent)', fontSize: 15, fontWeight: 800 }}>{EV_TO_WIN} {t('DO ZWYCIĘSTWA', 'TO WIN')}</span>
             <br />
-            potrzeba do wygranej
+            {t('potrzeba do wygranej', 'needed to win')}
           </div>
           <div className="row">
             <span className="small text-2">{b.name}</span>

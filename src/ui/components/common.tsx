@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Candidate } from '../../engine/types';
 import { PARTIES } from '../../data/parties';
 import { alpha } from '../colors';
+import { loc } from '../../i18n';
 import { useGame } from '../../store/gameStore';
 
 export function initials(name: string) {
@@ -27,9 +28,10 @@ export function Avatar({ name, color, size = 40 }: { name: string; color: string
 }
 
 export function PartyTag({ c }: { c: Pick<Candidate, 'party' | 'color'> }) {
+  const lang = useGame((s) => s.lang);
   return (
     <span className="chip" style={{ borderColor: alpha(c.color, 0.6), color: c.color }}>
-      {PARTIES[c.party].short}
+      {loc(PARTIES[c.party].short, lang)}
     </span>
   );
 }
@@ -57,11 +59,12 @@ export function Modal({ children, wide, onClose }: { children: ReactNode; wide?:
 
 export function Toasts() {
   const toasts = useGame((s) => s.toasts);
+  const lang = useGame((s) => s.lang);
   return (
     <div className="toasts">
       {toasts.map((t) => (
         <div key={t.id} className={`toast ${t.kind}`}>
-          {t.text}
+          {loc(t.text, lang)}
         </div>
       ))}
     </div>

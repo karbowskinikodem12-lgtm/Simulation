@@ -7,48 +7,50 @@ import { STATES, type StateInfo } from '../data/states';
 import { ISSUE_IDS } from '../data/issues';
 import type { GroupId, IssueId } from './types';
 import { clamp } from './util';
+import { L, type LStr } from '../i18n';
 
 export type Place = 'city' | 'suburb' | 'rural';
 export type Age = 'young' | 'middle' | 'senior';
 export type Edu = 'college' | 'noncollege';
 type Income = 'lowInc' | 'midInc' | 'highInc';
 
-export const GROUP_LABEL: Record<GroupId, string> = {
-  young: 'Młodzi (18–29)',
-  middle: 'W średnim wieku (30–64)',
-  senior: 'Seniorzy (65+)',
-  city: 'Duże miasta',
-  suburb: 'Przedmieścia',
-  rural: 'Obszary wiejskie',
-  college: 'Z wyższym wykształceniem',
-  noncollege: 'Bez dyplomu uczelni',
-  lowInc: 'Niskie dochody',
-  midInc: 'Średnie dochody',
-  highInc: 'Wysokie dochody',
-  independent: 'Wyborcy niezależni',
+export const GROUP_LABEL: Record<GroupId, LStr> = {
+  young: L('Młodzi (18–29)', 'Young (18–29)'),
+  middle: L('W średnim wieku (30–64)', 'Middle-aged (30–64)'),
+  senior: L('Seniorzy (65+)', 'Seniors (65+)'),
+  city: L('Duże miasta', 'Big cities'),
+  suburb: L('Przedmieścia', 'Suburbs'),
+  rural: L('Obszary wiejskie', 'Rural areas'),
+  college: L('Z wyższym wykształceniem', 'College graduates'),
+  noncollege: L('Bez dyplomu uczelni', 'Non-college'),
+  lowInc: L('Niskie dochody', 'Low income'),
+  midInc: L('Średnie dochody', 'Middle income'),
+  highInc: L('Wysokie dochody', 'High income'),
+  independent: L('Wyborcy niezależni', 'Independents'),
 };
 
-export const GROUP_SHORT: Record<GroupId, string> = {
-  young: 'młodych wyborców',
-  middle: 'wyborców w średnim wieku',
-  senior: 'seniorów',
-  city: 'mieszkańców dużych miast',
-  suburb: 'przedmieść',
-  rural: 'obszarów wiejskich',
-  college: 'absolwentów uczelni',
-  noncollege: 'wyborców bez dyplomu',
-  lowInc: 'najuboższych wyborców',
-  midInc: 'klasy średniej',
-  highInc: 'najzamożniejszych',
-  independent: 'wyborców niezależnych',
+/** Group names as used inside sentences ("…among {group}"; Polish genitive). */
+export const GROUP_SHORT: Record<GroupId, LStr> = {
+  young: L('młodych wyborców', 'young voters'),
+  middle: L('wyborców w średnim wieku', 'middle-aged voters'),
+  senior: L('seniorów', 'seniors'),
+  city: L('mieszkańców dużych miast', 'big-city voters'),
+  suburb: L('mieszkańców przedmieść', 'suburban voters'),
+  rural: L('mieszkańców wsi', 'rural voters'),
+  college: L('absolwentów uczelni', 'college graduates'),
+  noncollege: L('wyborców bez dyplomu', 'non-college voters'),
+  lowInc: L('najuboższych wyborców', 'low-income voters'),
+  midInc: L('klasy średniej', 'the middle class'),
+  highInc: L('najzamożniejszych', 'high earners'),
+  independent: L('wyborców niezależnych', 'independents'),
 };
 
-export const GROUP_SETS: { label: string; ids: GroupId[] }[] = [
-  { label: 'Wiek', ids: ['young', 'middle', 'senior'] },
-  { label: 'Miejsce zamieszkania', ids: ['city', 'suburb', 'rural'] },
-  { label: 'Wykształcenie', ids: ['college', 'noncollege'] },
-  { label: 'Dochód', ids: ['lowInc', 'midInc', 'highInc'] },
-  { label: 'Identyfikacja', ids: ['independent'] },
+export const GROUP_SETS: { label: LStr; ids: GroupId[] }[] = [
+  { label: L('Wiek', 'Age'), ids: ['young', 'middle', 'senior'] },
+  { label: L('Miejsce zamieszkania', 'Where they live'), ids: ['city', 'suburb', 'rural'] },
+  { label: L('Wykształcenie', 'Education'), ids: ['college', 'noncollege'] },
+  { label: L('Dochód', 'Income'), ids: ['lowInc', 'midInc', 'highInc'] },
+  { label: L('Identyfikacja', 'Party identification'), ids: ['independent'] },
 ];
 
 export const GROUP_IDS: GroupId[] = ['young', 'middle', 'senior', 'city', 'suburb', 'rural', 'college', 'noncollege', 'lowInc', 'midInc', 'highInc', 'independent'];

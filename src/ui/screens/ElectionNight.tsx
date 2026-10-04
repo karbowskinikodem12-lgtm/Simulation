@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGame } from '../../store/gameStore';
-import { STATES, STATE_BY_CODE, EV_TO_WIN } from '../../data/states';
+import { STATES, STATE_BY_CODE, EV_TO_WIN, stateName } from '../../data/states';
 import { USMap } from '../map/USMap';
 import { EVBar } from '../charts/EVBar';
 import { Avatar } from '../components/common';
 import { marginFill, mix, NEUTRAL } from '../colors';
 import { createRng } from '../../engine/rng';
 import { fmtVotes } from '../../engine/util';
+import { LangSwitch } from '../components/LangSwitch';
+import { getLang, type Lang } from '../../i18n';
+import { useT } from '../../i18n/useT';
 
 const START = 18.5; // 6:30pm ET
 const END = 27.5; // 3:30am ET
 
-function clockLabel(t: number) {
+function clockLabel(t: number, lang: Lang = getLang()) {
   const h = Math.floor(t) % 24;
-  const m = Math.floor((t % 1) * 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const m = String(Math.floor((t % 1) * 60)).padStart(2, '0');
+  if (lang === 'en') return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? 'AM' : 'PM'}`;
+  return `${String(h).padStart(2, '0')}:${m}`;
 }
 
 interface StateNight {
@@ -29,6 +33,7 @@ export function ElectionNight() {
   const game = useGame((s) => s.game)!;
   const setScreen = useGame((s) => s.setScreen);
   const result = game.result!;
+  const { t: tr, loc, lang } = useT();
   const [t, setT] = useState(START);
   const [rate, setRate] = useState(1);
   const [queue, setQueue] = useState<string[]>([]);
@@ -163,22 +168,23 @@ export function ElectionNight() {
     <div className="night-screen">
       <header className="night-header">
         <div className="brand display">
-          <span className="brand-mark">★</span> Wieczór wyborczy
+          <span className="brand-mark">★</span> {tr('Wieczór wyborczy', 'Election Night')}
         </div>
         <div className="night-clock display">
-          {clockLabel(t)} <span className="tiny muted">ET</span>
+          {clockLabel(t, lang)} <span className="tiny muted">ET</span>
         </div>
         <div className="row">
+          <LangSwitch compact />
           {[1, 3, 8].map((r) => (
             <button key={r} className={`btn sm${rate === r ? ' active' : ''}`} onClick={() => setRate(r)}>
               {r}×
             </button>
           ))}
           <button className="btn sm" onClick={() => setT(END)}>
-            Pomiń ⏭
+            {tr('Pomiń', 'Skip')} ⏭
           </button>
           <button className={`btn ${finished ? 'primary' : ''}`} onClick={() => setScreen('results')}>
-            Podsumowanie wyborów →
+            {tr('Podsumowanie wyborów →', 'Election summary →')}
           </button>
         </div>
       </header>
@@ -189,15 +195,15 @@ export function ElectionNight() {
 
       {banner && bannerWinner && (
         <div className="call-banner" key={banner} style={{ ['--cc' as string]: bannerWinner.color }}>
-          <div className="call-state display">{STATE_BY_CODE[banner].name.toUpperCase()}</div>
+          <div className="call-state display">{loc(stateName(banner)).toUpperCase()}</div>
           <div className="call-text">
             <span className="tiny display" style={{ letterSpacing: '0.18em' }}>
-              PROJEKCJA DLA
+              {tr('PROJEKCJA DLA', 'PROJECTED FOR')}
             </span>
             <b className="display">{bannerWinner.name.toUpperCase()}</b>
           </div>
           <div className="call-ev display">+{result.states[banner].ev[bannerWinner.id] ?? STATE_BY_CODE[banner].ev}</div>
-          <div className="tiny display call-ev-label">GŁOSÓW ELEKTORSKICH</div>
+          <div className="tiny display call-ev-label">{tr('GŁOSÓW ELEKTORSKICH', 'ELECTORAL VOTES')}</div>
         </div>
       )}
 
@@ -218,21 +224,22 @@ export function ElectionNight() {
           </div>
           <div className="victory-card" style={{ borderColor: projected.color, boxShadow: `0 0 120px ${projected.color}66` }}>
             <div className="tiny display" style={{ letterSpacing: '0.3em', color: 'var(--accent)' }}>
-              PROJEKCJA · WYBORY PREZYDENCKIE 2028
+              {tr('PROJEKCJA · WYBORY PREZYDENCKIE 2028', 'PROJECTION · 2028 PRESIDENTIAL ELECTION')}
             </div>
             <Avatar name={projected.name} color={projected.color} size={120} />
             <h1 className="display victory-name">{projected.name}</h1>
-            <div className="display victory-sub">ZWYCIĘŻA W WYBORACH PREZYDENCKICH</div>
+            <div className="display victory-sub">{tr('ZWYCIĘŻA W WYBORACH PREZYDENCKICH', 'WINS THE PRESIDENCY')}</div>
             <div className="victory-ev display" style={{ color: projected.color }}>
-              {calledEv[projected.id]} <span>głosów elektorskich · 270 do wygranej</span>
+              {calledEv[projected.id]}{' '}
+              <span>{tr(`głosów elektorskich · ${EV_TO_WIN} do zwycięstwa`, `electoral votes · ${EV_TO_WIN} to win`)}</span>
             </div>
-            {game.playerId && <div className="small text-2">{projected.isPlayer ? 'Twoja kampania zwyciężyła!' : 'Twoja kampania przegrała.'}</div>}
+            {game.playerId && <div className="small text-2">{projected.isPlayer ? tr('Twoja kampania zwyciężyła!', 'Your campaign won!') : tr('Twoja kampania przegrała.', 'Your campaign lost.')}</div>}
             <div className="row" style={{ gap: 10 }}>
               <button className="btn lg" onClick={() => setVictory('dismissed')}>
-                Oglądaj dalej
+                {tr('Oglądaj dalej', 'Keep watching')}
               </button>
               <button className="btn primary lg" onClick={() => setScreen('results')}>
-                Podsumowanie wyborów →
+                {tr('Podsumowanie wyborów →', 'Election summary →')}
               </button>
             </div>
           </div>
@@ -246,10 +253,10 @@ export function ElectionNight() {
               <Avatar name={projected.name} color={projected.color} size={46} />
               <div>
                 <div className="tiny display" style={{ letterSpacing: '0.2em', color: 'var(--accent)' }}>
-                  PROJEKCJA
+                  {tr('PROJEKCJA', 'PROJECTION')}
                 </div>
                 <div className="display" style={{ fontSize: 26, fontWeight: 800 }}>
-                  {projected.name} wygrywa wybory
+                  {tr(`${projected.name} wygrywa wybory`, `${projected.name} wins the election`)}
                 </div>
               </div>
             </div>
@@ -258,10 +265,10 @@ export function ElectionNight() {
             <div className="winner-banner" style={{ borderColor: winner.color }}>
               <div>
                 <div className="tiny display" style={{ letterSpacing: '0.2em', color: 'var(--accent)' }}>
-                  BRAK 270 GŁOSÓW
+                  {tr(`NIKT NIE MA ${EV_TO_WIN} GŁOSÓW`, `NO ONE REACHED ${EV_TO_WIN}`)}
                 </div>
                 <div className="display" style={{ fontSize: 22, fontWeight: 800 }}>
-                  Izba Reprezentantów wybiera: {winner.name}
+                  {tr('Izba Reprezentantów wybiera', 'The House of Representatives elects')}: {winner.name}
                 </div>
               </div>
             </div>
@@ -272,7 +279,7 @@ export function ElectionNight() {
               <div key={c.id} className="row">
                 <span className="legend-sw" style={{ background: c.color }} />
                 <b>{c.name}</b>
-                <span className="mono">{fmtVotes(popular[c.id])}</span>
+                <span className="mono">{fmtVotes(popular[c.id], lang)}</span>
                 <span className="muted mono">({counted > 0 ? ((popular[c.id] / counted) * 100).toFixed(1) : '0.0'}%)</span>
               </div>
             ))}
@@ -281,7 +288,7 @@ export function ElectionNight() {
 
         <aside className="night-side">
           <div className="panel section col" style={{ gap: 6 }}>
-            <div className="panel-title">Kluczowe stany</div>
+            <div className="panel-title">{tr('Kluczowe stany', 'Key states')}</div>
             {keyRaces.map(({ s }) => {
               const n = night[s.code];
               const sorted = game.candidates.map((c) => ({ c, v: n.shares[c.id] })).sort((a, b) => b.v - a.v);
@@ -289,16 +296,23 @@ export function ElectionNight() {
                 <div key={s.code} className="race-row">
                   <div className="spread small">
                     <b>
-                      {s.name} <span className="muted tiny">{s.ev} EV</span>
+                      {loc(stateName(s.code))}{' '}
+                      <span className="muted tiny">
+                        {s.ev} {tr('gł. el.', 'EV')}
+                      </span>
                     </b>
                     {n.called ? (
                       <span className="chip" style={{ color: game.candidates.find((c) => c.id === n.called)!.color }}>
                         ✓ {game.candidates.find((c) => c.id === n.called)!.name.split(' ').slice(-1)[0]}
                       </span>
                     ) : n.reported > 0 ? (
-                      <span className="tiny muted">{Math.round(n.reported * 100)}% policzonych</span>
+                      <span className="tiny muted">
+                        {Math.round(n.reported * 100)}% {tr('policzonych', 'counted')}
+                      </span>
                     ) : (
-                      <span className="tiny muted">lokale do {clockLabel(s.pollClose)}</span>
+                      <span className="tiny muted">
+                        {tr('lokale do', 'polls close')} {clockLabel(s.pollClose, lang)}
+                      </span>
                     )}
                   </div>
                   {n.reported > 0 && (
@@ -318,15 +332,15 @@ export function ElectionNight() {
             })}
           </div>
           <div className="panel section col" style={{ gap: 4, flex: 1, minHeight: 0, overflow: 'auto' }}>
-            <div className="panel-title">Projekcje</div>
-            {calls.length === 0 && <div className="tiny muted">Pierwsze lokale zamykamy o 19:00 ET…</div>}
+            <div className="panel-title">{tr('Projekcje', 'Projections')}</div>
+            {calls.length === 0 && <div className="tiny muted">{tr('Pierwsze lokale zamykamy o 19:00 ET…', 'First polls close at 7:00 PM ET…')}</div>}
             {calls.map(({ s, at }) => {
               const w = game.candidates.find((c) => c.id === night[s.code].called)!;
               return (
                 <div key={s.code} className="call-item" style={{ borderLeftColor: w.color }}>
-                  <span className="tiny muted mono">{clockLabel(Math.max(s.pollClose, at))}</span>
+                  <span className="tiny muted mono">{clockLabel(Math.max(s.pollClose, at), lang)}</span>
                   <span className="small">
-                    <b>{STATE_BY_CODE[s.code].name}</b> dla {w.name}
+                    <b>{loc(stateName(s.code))}</b> {tr('dla', 'for')} {w.name}
                   </span>
                   <span className="tiny muted">{STATE_BY_CODE[s.code].ev}</span>
                 </div>
@@ -342,14 +356,19 @@ export function ElectionNight() {
 function NightTooltip({ code, n }: { code: string; n: StateNight }) {
   const game = useGame((s) => s.game)!;
   const s = STATE_BY_CODE[code];
+  const { t, loc, lang } = useT();
   return (
     <div className="col" style={{ gap: 4 }}>
       <div className="spread">
-        <b>{s.name}</b>
-        <span className="chip">{s.ev} EV</span>
+        <b>{loc(stateName(code))}</b>
+        <span className="chip">
+          {s.ev} {t('gł. el.', 'EV')}
+        </span>
       </div>
       {n.reported === 0 ? (
-        <div className="tiny muted">Lokale otwarte do {clockLabel(s.pollClose)} ET</div>
+        <div className="tiny muted">
+          {t('Lokale otwarte do', 'Polls open until')} {clockLabel(s.pollClose, lang)} ET
+        </div>
       ) : (
         <>
           {game.candidates.map((c) => (
@@ -359,7 +378,8 @@ function NightTooltip({ code, n }: { code: string; n: StateNight }) {
             </div>
           ))}
           <div className="tiny muted">
-            Policzono {Math.round(n.reported * 100)}% głosów{n.called ? ' · projekcja ogłoszona' : ''}
+            {t(`Policzono ${Math.round(n.reported * 100)}% głosów`, `${Math.round(n.reported * 100)}% of votes counted`)}
+            {n.called ? t(' · projekcja ogłoszona', ' · race called') : ''}
           </div>
         </>
       )}
