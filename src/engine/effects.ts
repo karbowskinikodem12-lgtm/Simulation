@@ -2,11 +2,13 @@
 // trivial to add new events without touching the simulation core.
 
 import { STATES, STATE_BY_CODE } from '../data/states';
-import type { Economy, EventContext, GameState, IssueId } from './types';
+import type { CandidateStats, Economy, EventContext, FundSource, GameState, IssueId } from './types';
 import type { Rng } from './rng';
 import { clamp } from './util';
 import { pushKeyEvent, pushNews } from './news';
 import { NATIONAL_IDEAL } from './voterModel';
+import { earn } from './actions';
+import { PARTIES } from '../data/parties';
 
 /** self = event's candidate, other = ctx.otherId, others = everyone but self, all = everyone. */
 export type Target = 'self' | 'other' | 'others' | 'all';
@@ -14,7 +16,7 @@ export type Target = 'self' | 'other' | 'others' | 'all';
 export type Effect =
   | { k: 'fav'; t: Target; v: number }
   | { k: 'momentum'; t: Target; v: number }
-  | { k: 'funds'; t: Target; v: number }
+  | { k: 'funds'; t: Target; v: number; src?: FundSource }
   | { k: 'enthusiasm'; t: Target; v: number }
   | { k: 'stamina'; t: Target; v: number }
   | { k: 'prep'; t: Target; v: number }
@@ -26,7 +28,14 @@ export type Effect =
   /** Local opinion shift in ctx.state (or listed states) for target. */
   | { k: 'local'; t: Target; v: number; states?: string[]; region?: boolean }
   | { k: 'chance'; p: number; yes: Effect[]; no: Effect[]; yesNews?: string; noNews?: string }
-  | { k: 'key'; text: string; impact: number; t?: Target };
+  | { k: 'key'; text: string; impact: number; t?: Target }
+  /** Permanent change of a candidate statistic. */
+  | { k: 'stat'; t: Target; stat: keyof CandidateStats; v: number }
+  | { k: 'buzz'; t: Target; v: number }
+  | { k: 'approval'; v: number }
+  | { k: 'interest'; v: number }
+  /** Move target's positions toward (and beyond) the party platform by fraction v — pleasing the base. */
+  | { k: 'toBase'; t: Target; v: number };
 
 function targets(game: GameState, ctx: EventContext, t: Target): string[] {
   const all = game.candidates.map((c) => c.id);
@@ -50,7 +59,11 @@ export function fill(text: string, game: GameState, ctx: EventContext): string {
     .replaceAll('{state}', ctx.state ? STATE_BY_CODE[ctx.state].name : '');
 }
 
-export function applyEffects(game: GameState, effects: Effect[], ctx: EventContext, rng: Rng) {
+/**
+ * Apply effects. `harmScale` multiplies damage (negative favourability/momentum) to the event's own
+ * candidate — used to make scandals hurt scandal-prone candidates more and "teflon" ones less.
+ */
+export function applyEffects(game: GameState, effects: Effect[], ctx: EventContext, rng: Rng, harmScale = 1) {
   for (const e of effects) {
     switch (e.k) {
       case 'fav':
@@ -61,11 +74,12 @@ export function applyEffects(game: GameState, effects: Effect[], ctx: EventConte
       case 'prep':
         for (const id of targets(game, ctx, e.t)) {
           const c = game.candidates.find((x) => x.id === id)!;
-          if (e.k === 'fav') c.favorability = clamp(c.favorability + e.v, -50, 50);
-          if (e.k === 'momentum') c.momentum += e.v;
+          const scale = id === ctx.candId && e.v < 0 ? harmScale : 1;
+          if (e.k === 'fav') c.favorability = clamp(c.favorability + e.v * scale, -50, 50);
+          if (e.k === 'momentum') c.momentum += e.v * scale;
           if (e.k === 'funds') {
-            c.funds = Math.max(0, c.funds + e.v);
-            if (e.v > 0) c.totals.raised += e.v;
+            if (e.v > 0) earn(c, e.v, e.src ?? 'pac');
+            else c.funds = Math.max(0, c.funds + e.v);
           }
           if (e.k === 'enthusiasm') c.enthusiasm = clamp(c.enthusiasm + e.v, 0, 100);
           if (e.k === 'stamina') c.stamina = clamp(c.stamina + e.v, 0, 100);
@@ -111,12 +125,37 @@ export function applyEffects(game: GameState, effects: Effect[], ctx: EventConte
         }
         break;
       }
+      case 'stat':
+        for (const id of targets(game, ctx, e.t)) {
+          const c = game.candidates.find((x) => x.id === id)!;
+          c.stats[e.stat] = clamp(c.stats[e.stat] + e.v, 5, 99);
+        }
+        break;
+      case 'buzz':
+        for (const id of targets(game, ctx, e.t)) {
+          const c = game.candidates.find((x) => x.id === id)!;
+          c.social.buzz = clamp(c.social.buzz + e.v, -1, 1);
+        }
+        break;
+      case 'toBase':
+        for (const id of targets(game, ctx, e.t)) {
+          const c = game.candidates.find((x) => x.id === id)!;
+          const d = PARTIES[c.party].defaults;
+          for (const k of Object.keys(c.positions) as IssueId[]) c.positions[k] = Math.round(clamp(c.positions[k] + (d[k] * 1.2 - c.positions[k]) * e.v, -100, 100));
+        }
+        break;
+      case 'approval':
+        game.approval = clamp(game.approval + e.v, 20, 75);
+        break;
+      case 'interest':
+        game.interest = clamp(game.interest + e.v, 10, 100);
+        break;
       case 'chance':
         if (rng.chance(e.p)) {
-          applyEffects(game, e.yes, ctx, rng);
+          applyEffects(game, e.yes, ctx, rng, harmScale);
           if (e.yesNews) pushNews(game, fill(e.yesNews, game, ctx), { tone: 'neutral', candId: ctx.candId, category: 'event' });
         } else {
-          applyEffects(game, e.no, ctx, rng);
+          applyEffects(game, e.no, ctx, rng, harmScale);
           if (e.noNews) pushNews(game, fill(e.noNews, game, ctx), { tone: 'neutral', candId: ctx.candId, category: 'event' });
         }
         break;

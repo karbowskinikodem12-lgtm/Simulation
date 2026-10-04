@@ -9,8 +9,9 @@ import { Avatar } from '../components/common';
 import { marginFill } from '../colors';
 import { dayLabel } from '../selectors';
 import { fmtMoney, fmtVotes } from '../../engine/util';
+import { GROUP_LABEL, GROUP_SETS } from '../../engine/groups';
 
-type Tab = 'summary' | 'states' | 'campaign';
+type Tab = 'summary' | 'states' | 'groups' | 'campaign';
 type SortKey = 'name' | 'ev' | 'margin' | 'turnout';
 
 export function ResultsScreen() {
@@ -45,6 +46,7 @@ export function ResultsScreen() {
             [
               ['summary', 'Podsumowanie'],
               ['states', 'Wyniki w stanach'],
+              ['groups', 'Grupy wyborców'],
               ['campaign', 'Przebieg kampanii'],
             ] as [Tab, string][]
           ).map(([id, label]) => (
@@ -81,6 +83,7 @@ export function ResultsScreen() {
                 <div className="text-2" style={{ marginTop: 4 }}>
                   {winner.name} ({PARTIES[winner.party].name}) — „{winner.slogan}”
                 </div>
+                <div className="summary-line">{result.analysis.summary}</div>
               </div>
               <div className="hero-stats">
                 <div>
@@ -163,10 +166,15 @@ export function ResultsScreen() {
                 <KeyEvents />
               </div>
             </div>
+            <div className="results-grid two">
+              <SwingStates />
+              <BigWins />
+            </div>
           </div>
         )}
 
         {tab === 'states' && <StatesTab fills={fills} />}
+        {tab === 'groups' && <GroupsTab />}
         {tab === 'campaign' && <CampaignTab />}
       </div>
     </div>
@@ -380,6 +388,7 @@ function CampaignTab() {
           <div className="panel-title" style={{ marginTop: 8 }}>
             Finanse kampanii
           </div>
+          <LineChart height={120} series={game.candidates.map((c) => ({ id: c.id, label: `${c.name} — gotówka`, color: c.color, values: h.map((x) => x.funds?.[c.id] ?? 0) }))} xLabels={lbl} yMin={0} yFormat={(v) => `$${v.toFixed(0)}M`} />
           {game.candidates.map((c) => (
             <div key={c.id} className="spread small">
               <span style={{ color: c.color }}>{c.name}</span>
@@ -402,6 +411,175 @@ function CampaignTab() {
                 </div>
               ))}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SwingStates() {
+  const game = useGame((s) => s.game)!;
+  const result = game.result!;
+  const base = game.baseline;
+  const codes = result.analysis.swingStates.length ? result.analysis.swingStates : STATES.filter((s) => Math.abs(s.lean) < 0.04).map((s) => s.code);
+  return (
+    <div className="panel section col">
+      <div className="panel-title">
+        Swing states
+        <span className="tiny muted">wynik · zmiana od startu kampanii</span>
+      </div>
+      {codes.map((code) => {
+        const r = result.states[code];
+        const w = game.candidates.find((c) => c.id === r.winner)!;
+        const sorted = Object.entries(r.shares).sort((a, b) => b[1] - a[1]);
+        const second = sorted[1][0];
+        const margin = sorted[0][1] - sorted[1][1];
+        const baseMargin = base ? (base.stateShares[code][w.id] ?? 0) - (base.stateShares[code][second] ?? 0) : 0;
+        const flipped = base ? Object.entries(base.stateShares[code]).sort((a, b) => b[1] - a[1])[0][0] !== w.id : false;
+        return (
+          <div key={code} className="swing-row">
+            <span className="win-dot" style={{ background: w.color }} />
+            <b className="ellipsis">{STATE_BY_CODE[code].name}</b>
+            <span className="tiny muted">{STATE_BY_CODE[code].ev} EV</span>
+            <div className="stack-bar">
+              {game.candidates.map((c) => (
+                <div key={c.id} style={{ width: `${r.shares[c.id] * 100}%`, background: c.color }} />
+              ))}
+            </div>
+            <span className="mono small" style={{ color: w.color }}>
+              +{(margin * 100).toFixed(1)}
+            </span>
+            <span className={`tiny mono ${margin - baseMargin >= 0 ? 'good' : 'bad'}`} title="Zmiana przewagi zwycięzcy względem początku kampanii">
+              {margin - baseMargin >= 0 ? '▲' : '▼'}
+              {Math.abs((margin - baseMargin) * 100).toFixed(1)}
+            </span>
+            {flipped ? <span className="chip swing">PRZEJĘTY</span> : <span />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BigWins() {
+  const game = useGame((s) => s.game)!;
+  const result = game.result!;
+  return (
+    <div className="panel section col">
+      <div className="panel-title">Największe zwycięstwa i porażki</div>
+      <div className="bigwins-grid" style={{ gridTemplateColumns: `repeat(${game.candidates.length}, 1fr)` }}>
+        {game.candidates.map((c) => {
+          const rows = STATES.map((s) => {
+            const sh = result.states[s.code].shares;
+            const best = Math.max(...Object.entries(sh).filter(([id]) => id !== c.id).map(([, v]) => v));
+            return { code: s.code, m: sh[c.id] - best };
+          });
+          const wins = rows.filter((r) => r.m > 0).sort((a, b) => b.m - a.m).slice(0, 3);
+          const losses = rows.filter((r) => r.m < 0).sort((a, b) => a.m - b.m).slice(0, 3);
+          const closest = rows.filter((r) => r.m < 0).sort((a, b) => b.m - a.m)[0];
+          return (
+            <div key={c.id} className="col" style={{ gap: 4 }}>
+              <b style={{ color: c.color }}>{c.name}</b>
+              <div className="tiny muted">Najwyższe wygrane</div>
+              {wins.length === 0 && <div className="tiny muted">—</div>}
+              {wins.map((r) => (
+                <div key={r.code} className="spread small">
+                  <span>{STATE_BY_CODE[r.code].name}</span>
+                  <span className="mono good">+{(r.m * 100).toFixed(1)}</span>
+                </div>
+              ))}
+              <div className="tiny muted" style={{ marginTop: 4 }}>
+                Najdotkliwsze porażki
+              </div>
+              {losses.map((r) => (
+                <div key={r.code} className="spread small">
+                  <span>{STATE_BY_CODE[r.code].name}</span>
+                  <span className="mono bad">{(r.m * 100).toFixed(1)}</span>
+                </div>
+              ))}
+              {closest && (
+                <div className="tiny text-2" style={{ marginTop: 4 }}>
+                  Najbliżej wygranej: <b>{STATE_BY_CODE[closest.code].name}</b> ({(closest.m * 100).toFixed(1)} pkt)
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GroupsTab() {
+  const game = useGame((s) => s.game)!;
+  const result = game.result!;
+  const base = game.baseline;
+  return (
+    <div className="groups-tab">
+      <div className="panel section col">
+        <div className="panel-title">
+          Exit poll — jak głosowały grupy wyborców
+          <span className="tiny muted">poparcie · frekwencja · zmiana od początku kampanii</span>
+        </div>
+        {GROUP_SETS.map((set) => (
+          <div key={set.label} className="col" style={{ gap: 6, marginBottom: 8 }}>
+            <div className="tiny display muted" style={{ letterSpacing: '0.1em' }}>
+              {set.label.toUpperCase()}
+            </div>
+            {set.ids.map((g) => {
+              const r = result.groups[g];
+              const b = base?.groups[g];
+              const lead = Object.entries(r.shares).sort((x, y) => y[1] - x[1])[0][0];
+              const lc = game.candidates.find((c) => c.id === lead)!;
+              const shift = b ? r.shares[lead] - b.shares[lead] : 0;
+              return (
+                <div key={g} className="exit-row">
+                  <span className="small" style={{ fontWeight: 600 }}>
+                    {GROUP_LABEL[g]}
+                  </span>
+                  <div className="stack-bar tall">
+                    {game.candidates.map((c) => (
+                      <div key={c.id} style={{ width: `${r.shares[c.id] * 100}%`, background: c.color }}>
+                        {r.shares[c.id] > 0.12 && <span>{Math.round(r.shares[c.id] * 100)}%</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <span className="tiny mono" title="Frekwencja w grupie">
+                    🗳 {Math.round(r.turnout * 100)}%
+                    {b && (
+                      <span className={r.turnout - b.turnout >= 0 ? 'good' : 'bad'}>
+                        {' '}
+                        ({r.turnout - b.turnout >= 0 ? '+' : ''}
+                        {((r.turnout - b.turnout) * 100).toFixed(1)})
+                      </span>
+                    )}
+                  </span>
+                  <span className={`tiny mono ${shift >= 0 ? 'good' : 'bad'}`} style={{ color: shift >= 0 ? lc.color : undefined }} title={`Zmiana poparcia ${lc.name} od startu kampanii`}>
+                    {shift >= 0 ? '▲' : '▼'} {Math.abs(shift * 100).toFixed(1)}
+                  </span>
+                  <span className="tiny muted mono" title="Udział w elektoracie">
+                    {Math.round(r.size * 100)}% elektoratu
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="panel section col">
+        <div className="panel-title">Co mówią exit polle</div>
+        <div className="summary-line" style={{ marginTop: 0 }}>
+          {result.analysis.summary}
+        </div>
+        <ul className="reason-list">
+          {result.analysis.reasons.slice(0, 3).map((r, i) => (
+            <li key={i} className="good-li">
+              {r}
+            </li>
+          ))}
+        </ul>
+        <div className="tiny muted">
+          Frekwencja ogółem: {(result.turnout * 100).toFixed(1)}%{base ? ` (prognoza na starcie kampanii: ${(base.turnout * 100).toFixed(1)}%)` : ''}. Grupy nakładają się na siebie — ten sam wyborca należy do grupy wiekowej, miejsca zamieszkania, wykształcenia i dochodu.
         </div>
       </div>
     </div>

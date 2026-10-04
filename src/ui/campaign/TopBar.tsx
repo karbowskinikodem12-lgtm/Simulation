@@ -3,6 +3,7 @@ import { dayLabel } from '../selectors';
 import { bankedTotal } from '../../engine/election';
 import { fmtMoney } from '../../engine/util';
 import { TUNING } from '../../engine/config';
+import { phaseOf } from '../../engine/timeline';
 
 const SPEEDS: { s: Speed; label: string }[] = [
   { s: 0, label: '❚❚' },
@@ -39,6 +40,10 @@ export function TopBar() {
           <br />
           wyborów
         </div>
+      </div>
+      <div className="phase-chip" title={phaseOf(game).desc}>
+        <div className="tiny muted">Faza</div>
+        <b className="small">{phaseOf(game).short}</b>
       </div>
       <div className="speed-ctrl">
         {SPEEDS.map(({ s, label }) => (

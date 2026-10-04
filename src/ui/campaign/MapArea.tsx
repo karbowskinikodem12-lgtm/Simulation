@@ -3,9 +3,10 @@ import { useGame, type MapMode } from '../../store/gameStore';
 import { USMap } from '../map/USMap';
 import { EVBar } from '../charts/EVBar';
 import { STATES, STATE_BY_CODE } from '../../data/states';
-import { leaderOf } from '../../engine/voterModel';
+import { leaderOf, rateState, type RatingKey } from '../../engine/voterModel';
+import { PHASES, phaseOf } from '../../engine/timeline';
 import { candColor, dayLabel, effortStock, mapFills } from '../selectors';
-import { ratingOf, RATING_LABEL, marginFill } from '../colors';
+import { RATING_COLORS, marginFill } from '../colors';
 import { TUNING } from '../../engine/config';
 import { SCHEDULE_META } from '../../engine/actions';
 import { ISSUE_BY_ID } from '../../data/issues';
@@ -40,7 +41,7 @@ function StateTooltip({ game, snap, code }: { game: GameState; snap: Snapshot; c
         </div>
       ))}
       <div className="tiny muted">
-        {RATING_LABEL[ratingOf(l.margin)]} · przewaga {(l.margin * 100).toFixed(1)} pkt
+        {rateState(game, est).label} · przewaga {(l.margin * 100).toFixed(1)} pkt
       </div>
     </div>
   );
@@ -96,6 +97,7 @@ export function MapArea() {
             </div>
           ))}
         </div>
+        <RatingsStrip />
         <Timeline />
       </div>
 
@@ -149,11 +151,36 @@ function Timeline() {
   const T = game.settings.totalDays;
   const pct = (d: number) => `${(d / T) * 100}%`;
   const early = T - TUNING.earlyVotingDays;
+  const phase = phaseOf(game);
+  const daysLeft = T - game.day;
   return (
     <div className="timeline">
+      <div className="spread" style={{ marginBottom: 4 }}>
+        <span className="tiny">
+          <span className="phase-dot" /> <b>{phase.label}</b> <span className="muted">— {phase.desc}</span>
+        </span>
+        <span className="tiny">
+          <b className="display" style={{ fontSize: 15, color: 'var(--accent)' }}>
+            {daysLeft}
+          </b>{' '}
+          <span className="muted">dni do Election Day</span>
+        </span>
+      </div>
+      <div className="phase-track">
+        {PHASES.filter((p) => p.to > p.from).map((p) => (
+          <div key={p.id} className={`phase-seg${p.id === phase.id ? ' now' : ''}${game.day / T >= p.to ? ' past' : ''}`} style={{ width: `${(p.to - p.from) * 100}%` }} title={`${p.label}: ${p.desc}`}>
+            <span>{p.short}</span>
+          </div>
+        ))}
+      </div>
       <div className="timeline-track">
         <div className="timeline-early" style={{ left: pct(early), width: pct(TUNING.earlyVotingDays) }} title="Głosowanie przedterminowe" />
         <div className="timeline-fill" style={{ width: pct(game.day) }} />
+        {game.conventions.map((cv) => (
+          <div key={cv.candId} className={`timeline-mark small${cv.done ? ' done' : ''}`} style={{ left: pct(cv.day), background: cv.done ? candColor(game, cv.candId) : undefined }} title={`Konwencja: ${game.candidates.find((c) => c.id === cv.candId)?.name} · ${dayLabel(game, cv.day)}`}>
+            🎉
+          </div>
+        ))}
         {game.debates.map((d) => {
           const winner = d.winner ? candColor(game, d.winner) : undefined;
           return (
@@ -169,8 +196,35 @@ function Timeline() {
       <div className="spread tiny muted" style={{ marginTop: 3 }}>
         <span>{dayLabel(game, 0)}</span>
         <span>głosowanie przedterminowe od {dayLabel(game, early)}</span>
-        <span>Wybory: {dayLabel(game, T)}</span>
+        <span>Election Day: {dayLabel(game, T)}</span>
       </div>
+    </div>
+  );
+}
+
+const RATING_ORDER: RatingKey[] = ['safeD', 'likelyD', 'leanD', 'tossup', 'leanR', 'likelyR', 'safeR'];
+const RATING_SHORT: Record<RatingKey, string> = { safeD: 'Safe D', likelyD: 'Likely D', leanD: 'Lean D', tossup: 'Toss-up', leanR: 'Lean R', likelyR: 'Likely R', safeR: 'Safe R' };
+
+function RatingsStrip() {
+  const game = useGame((s) => s.game)!;
+  const snap = useGame((s) => s.snap)!;
+  const buckets = useMemo(() => {
+    const out = Object.fromEntries(RATING_ORDER.map((k) => [k, { ev: 0, states: [] as string[] }])) as Record<RatingKey, { ev: number; states: string[] }>;
+    for (const st of STATES) {
+      const r = rateState(game, snap.states[st.code].estimate);
+      out[r.key].ev += st.ev;
+      out[r.key].states.push(st.code);
+    }
+    return out;
+  }, [game, snap]);
+  return (
+    <div className="ratings-strip">
+      {RATING_ORDER.map((k) => (
+        <div key={k} className="rating-cell" style={{ flex: Math.max(buckets[k].ev, 24), background: RATING_COLORS[k] }} title={`${RATING_SHORT[k]}: ${buckets[k].states.join(', ') || '—'}`}>
+          <span className="tiny">{RATING_SHORT[k]}</span>
+          <b className="mono">{buckets[k].ev}</b>
+        </div>
+      ))}
     </div>
   );
 }

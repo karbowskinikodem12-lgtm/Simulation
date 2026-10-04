@@ -1,4 +1,4 @@
-import type { GameState, KeyEvent, NewsItem, NewsTone } from './types';
+import type { GameState, KeyEvent, NewsItem, NewsTone, Severity } from './types';
 
 export function nextId(game: GameState, prefix: string): string {
   game.idCounter += 1;
@@ -8,7 +8,7 @@ export function nextId(game: GameState, prefix: string): string {
 export function pushNews(
   game: GameState,
   headline: string,
-  opts: { tone?: NewsTone; candId?: string; body?: string; category?: string } = {},
+  opts: { tone?: NewsTone; candId?: string; body?: string; category?: string; severity?: Severity } = {},
 ): NewsItem {
   const item: NewsItem = {
     id: nextId(game, 'n'),
@@ -18,9 +18,10 @@ export function pushNews(
     tone: opts.tone ?? 'neutral',
     candId: opts.candId,
     category: opts.category ?? 'campaign',
+    severity: opts.severity ?? (opts.tone === 'breaking' ? 'major' : 'minor'),
   };
   game.news.unshift(item);
-  if (game.news.length > 160) game.news.length = 160;
+  if (game.news.length > 220) game.news.length = 220;
   return item;
 }
 

@@ -1,4 +1,5 @@
 import { memo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { CALLOUT_STATES, LABEL_OFFSET, MAP_HEIGHT, MAP_WIDTH, STATE_SHAPES } from './geo';
 import { STATE_BY_CODE } from '../../data/states';
 
@@ -77,11 +78,14 @@ export function USMap({ fills, selected, dimmed, onSelect, tooltip, showLabels =
           })}
         </g>
       </svg>
-      {hover && tooltip && (
-        <div className="map-tooltip" style={{ left: Math.min(hover.x + 16, window.innerWidth - 240), top: Math.min(hover.y + 12, window.innerHeight - 200) }}>
-          {tooltip(hover.code)}
-        </div>
-      )}
+      {hover &&
+        tooltip &&
+        createPortal(
+          <div className="map-tooltip" style={{ left: Math.min(hover.x + 16, window.innerWidth - 240), top: Math.min(hover.y + 12, window.innerHeight - 200) }}>
+            {tooltip(hover.code)}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

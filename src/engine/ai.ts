@@ -8,7 +8,8 @@ import type { Candidate, GameState, IssueId } from './types';
 import type { Rng } from './rng';
 import type { Snapshot } from './voterModel';
 import { issueEdge, marginFor } from './voterModel';
-import { addToSchedule, adDailyCost, launchAd, officeCost, openOffice } from './actions';
+import { addToSchedule, buyMedia, officeCost, openOffice, suggestedBudget, type MediaBuy } from './actions';
+import { aiSocialStrategy } from './social';
 
 export interface Target {
   code: string;
@@ -35,6 +36,15 @@ function mainRival(game: GameState, c: Candidate, snap: Snapshot): string {
   return game.candidates.filter((x) => x.id !== c.id).sort((a, b) => snap.national[b.id] - snap.national[a.id])[0].id;
 }
 
+/** Relative weights of daily activities by campaign style. */
+const STYLE_MIX: Record<Candidate['style'], { rally: number; townhall: number; fundraiser: number; speech: number; interview: number; social: number }> = {
+  aggressive: { rally: 0.5, townhall: 0.06, fundraiser: 0.14, speech: 0.08, interview: 0.12, social: 0.1 },
+  establishment: { rally: 0.38, townhall: 0.12, fundraiser: 0.24, speech: 0.14, interview: 0.08, social: 0.04 },
+  grassroots: { rally: 0.5, townhall: 0.2, fundraiser: 0.08, speech: 0.1, interview: 0.04, social: 0.08 },
+  media: { rally: 0.36, townhall: 0.06, fundraiser: 0.14, speech: 0.08, interview: 0.16, social: 0.2 },
+  balanced: { rally: 0.46, townhall: 0.12, fundraiser: 0.16, speech: 0.12, interview: 0.07, social: 0.07 },
+};
+
 export function planDay(game: GameState, c: Candidate, snap: Snapshot, targets: Target[], rng: Rng) {
   const nextDebate = game.debates.find((d) => !d.done && d.day >= game.day);
   const top = targets.slice(0, 6);
@@ -45,40 +55,45 @@ export function planDay(game: GameState, c: Candidate, snap: Snapshot, targets: 
   } else if (c.stamina < 28) {
     addToSchedule(game, c.id, 'rest');
   } else if (c.funds < 6 && rng.chance(0.7)) {
-    const hub = rng.pick([...DONOR_HUBS]);
-    addToSchedule(game, c.id, 'fundraiser', { state: hub });
+    addToSchedule(game, c.id, 'fundraiser', { state: rng.pick([...DONOR_HUBS]) });
   } else {
-    const roll = rng.next();
-    if (roll < 0.6) addToSchedule(game, c.id, 'rally', { state: pickTarget() });
-    else if (roll < 0.72) addToSchedule(game, c.id, 'townhall', { state: pickTarget() });
-    else if (roll < 0.84) addToSchedule(game, c.id, 'fundraiser', { state: rng.pick([...DONOR_HUBS]) });
-    else if (roll < 0.94) addToSchedule(game, c.id, 'speech', { issue: bestIssue(game, c, snap) });
-    else addToSchedule(game, c.id, 'interview');
+    const mix = STYLE_MIX[c.style];
+    const kind = rng.weighted(Object.keys(mix) as (keyof typeof mix)[], (k) => mix[k]);
+    if (kind === 'rally') addToSchedule(game, c.id, 'rally', { state: pickTarget() });
+    else if (kind === 'townhall') addToSchedule(game, c.id, 'townhall', { state: pickTarget() });
+    else if (kind === 'fundraiser') addToSchedule(game, c.id, 'fundraiser', { state: rng.pick([...DONOR_HUBS]) });
+    else if (kind === 'speech') addToSchedule(game, c.id, 'speech', { issue: bestIssue(game, c, snap) });
+    else if (kind === 'interview') addToSchedule(game, c.id, 'interview');
+    else addToSchedule(game, c.id, 'socialBlitz');
   }
 }
 
-function buyAds(game: GameState, c: Candidate, snap: Snapshot, targets: Target[], rng: Rng) {
+/** Weekly media and ground budget allocation, shaped by the candidate's style. */
+function buyMediaPlan(game: GameState, c: Candidate, snap: Snapshot, targets: Target[], rng: Rng) {
   const reserve = 4;
   let budget = Math.max(0, (c.funds - reserve) * 0.6);
   if (budget < 1) return;
   const rival = mainRival(game, c, snap);
-  if (budget > 15 && rng.chance(0.45)) {
-    const kind = rng.chance(0.35) ? 'attack' : 'positive';
-    if (!launchAd(game, c.id, { scope: 'national', kind, days: 7, targetId: kind === 'attack' ? rival : undefined })) budget -= adDailyCost('national') * 7;
+  const attackShare = c.style === 'aggressive' ? 0.5 : c.style === 'grassroots' ? 0.15 : 0.3;
+  const digitalShare = c.style === 'media' ? 0.45 : c.style === 'grassroots' ? 0.3 : 0.2;
+  const canvassShare = c.style === 'grassroots' ? 0.35 : c.style === 'establishment' ? 0.15 : 0.2;
+  const buy = (b: MediaBuy) => {
+    if (b.amount > budget || b.amount < 0.1) return;
+    if (!buyMedia(game, c.id, b)) budget -= b.amount;
+  };
+  if (budget > 15 && rng.chance(0.4)) {
+    const kind = rng.chance(attackShare) ? 'attack' : 'positive';
+    buy({ channel: 'tv', scope: 'national', kind, amount: suggestedBudget('tv', 'national') * rng.range(0.8, 1.3), days: 7, targetId: kind === 'attack' ? rival : undefined });
   }
+  if (budget > 4 && rng.chance(digitalShare + 0.2)) buy({ channel: 'digital', scope: 'national', kind: 'positive', amount: suggestedBudget('digital', 'national') * rng.range(0.8, 1.5), days: 7 });
   for (const t of targets.slice(0, 7)) {
-    const cost = adDailyCost(t.code) * 7;
-    if (cost > budget) continue;
     const roll = rng.next();
-    const kind = roll < 0.3 ? 'attack' : roll < 0.45 ? 'issue' : 'positive';
-    const err = launchAd(game, c.id, {
-      scope: t.code,
-      kind,
-      days: 7,
-      targetId: kind === 'attack' ? rival : undefined,
-      issue: kind === 'issue' ? bestIssue(game, c, snap) : undefined,
-    });
-    if (!err) budget -= cost;
+    const kind = roll < attackShare ? 'attack' : roll < attackShare + 0.15 ? 'issue' : 'positive';
+    const channel = rng.chance(digitalShare) ? 'digital' : 'tv';
+    // Spend more where the race is closest, but never go all-in on a single market.
+    const scale = rng.range(0.8, 1.6) * (t.value > 5 ? 1.4 : 1);
+    buy({ channel, scope: t.code, kind, amount: suggestedBudget(channel, t.code) * scale, days: 7, targetId: kind === 'attack' ? rival : undefined, issue: kind === 'issue' ? bestIssue(game, c, snap) : undefined });
+    if (rng.chance(canvassShare) && game.day / game.settings.totalDays > 0.35) buy({ channel: 'canvass', scope: t.code, kind: 'positive', amount: suggestedBudget('canvass', t.code) * rng.range(0.8, 1.5), days: 7 });
   }
 }
 
@@ -88,7 +103,8 @@ export function runAi(game: GameState, c: Candidate, snap: Snapshot, rng: Rng) {
   if (c.schedule.length === 0) planDay(game, c, snap, targets, rng);
 
   const idx = game.candidates.indexOf(c);
-  if ((game.day + idx * 2) % 7 === 0) buyAds(game, c, snap, targets, rng);
+  if ((game.day + idx * 2) % 7 === 0) buyMediaPlan(game, c, snap, targets, rng);
+  if (game.day % 10 === idx) c.social.strategy = aiSocialStrategy(c);
 
   const p = game.day / game.settings.totalDays;
   if (p < 0.6 && c.funds > 12 && rng.chance(0.18)) {

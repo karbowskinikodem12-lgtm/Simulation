@@ -2,7 +2,7 @@
 
 export const TUNING = {
   // --- voter model ---
-  partisanWeight: 0.5, // multiplier on atanh(lean) partisanship
+  partisanWeight: 0.6, // multiplier on atanh(lean) partisanship
   issueWeight: 0.55, // weight of policy distance (per 100 points of distance)
   idealScale: 95, // how many position points one unit of state lean moves the median voter
   favorabilityWeight: 0.008, // utility per point of net favorability
@@ -14,6 +14,7 @@ export const TUNING = {
   effortWeight: 0.075, // utility per log-unit of campaign effort in a state
   attackWeight: 0.06,
   nationalAdSpill: 0.22,
+  socialWeight: 0.07, // utility per unit of social buzz (scaled by segment social-media use)
 
   // --- undecided voters ---
   undecidedStart: 0.11,

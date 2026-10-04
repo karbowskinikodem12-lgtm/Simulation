@@ -31,7 +31,11 @@ export function ElectionNight() {
   const result = game.result!;
   const [t, setT] = useState(START);
   const [rate, setRate] = useState(1);
+  const [queue, setQueue] = useState<string[]>([]);
+  const [victory, setVictory] = useState<'no' | 'show' | 'dismissed'>('no');
+  const seen = useRef(new Set<string>());
   const last = useRef<number | null>(null);
+  const paused = victory === 'show';
 
   // Deterministic per-state counting skew (early vs. late counted ballots).
   const skew = useMemo(() => {
@@ -41,12 +45,14 @@ export function ElectionNight() {
     return out;
   }, [game]);
 
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   useEffect(() => {
     let raf = 0;
     const step = (now: number) => {
       if (last.current !== null) {
         const dt = (now - last.current) / 1000;
-        setT((v) => Math.min(END, v + dt * rate * (10 / 60))); // 10 game-minutes per second at 1x
+        if (!pausedRef.current) setT((v) => Math.min(END, v + dt * rate * (10 / 60))); // 10 game-minutes per second at 1x
       }
       last.current = now;
       raf = requestAnimationFrame(step);
@@ -129,6 +135,30 @@ export function ElectionNight() {
 
   const winner = game.candidates.find((c) => c.id === result.winner)!;
 
+  // Queue newly called states for the big "CALLED" banner.
+  const callKey = calls.map((c) => c.s.code).join(',');
+  useEffect(() => {
+    const fresh = calls.filter((c) => !seen.current.has(c.s.code)).sort((a, b) => a.at - b.at);
+    if (!fresh.length) return;
+    fresh.forEach((c) => seen.current.add(c.s.code));
+    // When skipping ahead, only announce the biggest prizes.
+    const toShow = fresh.length > 8 ? [...fresh].sort((a, b) => b.s.ev - a.s.ev).slice(0, 4) : fresh;
+    setQueue((q) => [...q, ...toShow.map((c) => c.s.code)].slice(-12));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callKey]);
+  useEffect(() => {
+    if (!queue.length) return;
+    const ev = STATE_BY_CODE[queue[0]].ev;
+    const ms = ((ev >= 10 ? 2300 : 1200) / Math.sqrt(rate)) * (queue.length > 4 ? 0.5 : 1);
+    const id = setTimeout(() => setQueue((q) => q.slice(1)), ms);
+    return () => clearTimeout(id);
+  }, [queue, rate]);
+  useEffect(() => {
+    if (projected && victory === 'no') setVictory('show');
+  }, [projected, victory]);
+  const banner = queue[0];
+  const bannerWinner = banner ? game.candidates.find((c) => c.id === night[banner]?.called) : undefined;
+
   return (
     <div className="night-screen">
       <header className="night-header">
@@ -154,12 +184,64 @@ export function ElectionNight() {
       </header>
 
       <div className="panel night-ev">
-        <EVBar candidates={game.candidates} ev={calledEv} height={22} />
+        <EVBar candidates={game.candidates} ev={calledEv} height={26} />
       </div>
+
+      {banner && bannerWinner && (
+        <div className="call-banner" key={banner} style={{ ['--cc' as string]: bannerWinner.color }}>
+          <div className="call-state display">{STATE_BY_CODE[banner].name.toUpperCase()}</div>
+          <div className="call-text">
+            <span className="tiny display" style={{ letterSpacing: '0.18em' }}>
+              PROJEKCJA DLA
+            </span>
+            <b className="display">{bannerWinner.name.toUpperCase()}</b>
+          </div>
+          <div className="call-ev display">+{result.states[banner].ev[bannerWinner.id] ?? STATE_BY_CODE[banner].ev}</div>
+          <div className="tiny display call-ev-label">GŁOSÓW ELEKTORSKICH</div>
+        </div>
+      )}
+
+      {victory === 'show' && projected && (
+        <div className="victory-overlay">
+          <div className="confetti">
+            {Array.from({ length: 60 }, (_, i) => (
+              <span
+                key={i}
+                style={{
+                  left: `${(i * 37) % 100}%`,
+                  background: i % 3 === 0 ? '#f0b84a' : i % 3 === 1 ? projected.color : '#ffffff',
+                  animationDelay: `${(i % 12) * 0.18}s`,
+                  animationDuration: `${2.6 + (i % 5) * 0.4}s`,
+                }}
+              />
+            ))}
+          </div>
+          <div className="victory-card" style={{ borderColor: projected.color, boxShadow: `0 0 120px ${projected.color}66` }}>
+            <div className="tiny display" style={{ letterSpacing: '0.3em', color: 'var(--accent)' }}>
+              PROJEKCJA · WYBORY PREZYDENCKIE 2028
+            </div>
+            <Avatar name={projected.name} color={projected.color} size={120} />
+            <h1 className="display victory-name">{projected.name}</h1>
+            <div className="display victory-sub">ZWYCIĘŻA W WYBORACH PREZYDENCKICH</div>
+            <div className="victory-ev display" style={{ color: projected.color }}>
+              {calledEv[projected.id]} <span>głosów elektorskich · 270 do wygranej</span>
+            </div>
+            {game.playerId && <div className="small text-2">{projected.isPlayer ? 'Twoja kampania zwyciężyła!' : 'Twoja kampania przegrała.'}</div>}
+            <div className="row" style={{ gap: 10 }}>
+              <button className="btn lg" onClick={() => setVictory('dismissed')}>
+                Oglądaj dalej
+              </button>
+              <button className="btn primary lg" onClick={() => setScreen('results')}>
+                Podsumowanie wyborów →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="night-body">
         <div className="panel night-map">
-          {projected && (
+          {projected && victory === 'dismissed' && (
             <div className="winner-banner" style={{ borderColor: projected.color }}>
               <Avatar name={projected.name} color={projected.color} size={46} />
               <div>

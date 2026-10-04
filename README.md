@@ -10,6 +10,7 @@ npm run dev        # http://localhost:5173
 npm run build      # wersja produkcyjna w dist/ (npm run preview, aby ją podejrzeć)
 npm test           # testy silnika (vitest)
 npm run simulate   # raport balansu: kilkadziesiąt pełnych kampanii AI vs AI i gracz na autopilocie
+CALIBRATE=1 npx vitest run tests/calibrate.test.ts   # kalibracja modelu wyborców (błąd vs historyczne preferencje)
 ```
 
 Gra działa w całości lokalnie (bez serwera i kluczy API). Czcionki i dane mapy są dołączone przez npm.
@@ -65,6 +66,23 @@ Dla każdego stanu i kandydata liczona jest użyteczność:
 - **stan rodzinny**, **wydarzenia lokalne**, **bariera trzeciej partii**.
 
 Udziały liczy wielomianowy logit (softmax). Gracz widzi tylko sondaże, a te mają ukryty, skorelowany błąd systematyczny, który ujawnia się dopiero w wieczór wyborczy.
+
+## Co nowego w wersji 2 (realistyczna symulacja)
+
+- **Grupy wyborców** (`engine/groups.ts`): każdy stan dzieli się na 18 segmentów (miasto/przedmieścia/wieś × wiek × wykształcenie), z rozkładem dochodów i odsetkiem niezależnych. Segmenty mają własne priorytety tematyczne, poglądy, wrażliwość na TV / internet / social media / wiece i skłonność do głosowania. Parametry są centrowane tak, by stan jako całość zachował historyczne preferencje (błąd kalibracji ok. 3,8 pkt).
+- **Model frekwencji**: wyniki stanowe to udziały „likely voters” — o wyniku decyduje też, kto faktycznie pójdzie głosować (propensja grupy × entuzjazm × ground game × zainteresowanie wyborami).
+- **7-stopniowe oceny stanów** (Safe/Likely/Lean D, Toss-up, Lean/Likely/Safe R), konkurencyjność i prognozowana frekwencja w każdym stanie.
+- **Gospodarka**: stopy procentowe (reguła Taylora, posiedzenia Fed), giełda, zaufanie konsumentów i **aprobata administracji**, która przekłada się na kandydata partii rządzącej.
+- **Pieniądze**: źródła wpływów (drobni darczyńcy, duzi darczyńcy, PAC, zbiórki, partia), kategorie wydatków (TV, internet, teren, podróże, wydarzenia, sztab), koszty podróży, wydatki kwotowe („$10M na reklamy w Pensylwanii”) z podwójnie malejącym efektem.
+- **Kampania w stanach**: wiece, spotkania, zbiórki, reklamy TV, kampania internetowa, door-to-door, biura terenowe, dzień w social media.
+- **Debaty**: strategia przed debatą + raport (oceny A–F, nagłówki 5 mediów o różnych sympatiach, zmiana sondaży i momentum).
+- **Media**: wagi wydarzeń (drobne/istotne/ważne — większość drobna, wielkie rzadkie), kilkanaście nowych drobnych newsów, animowany baner PILNE.
+- **Social media** (`engine/social.ts`): obserwujący, zaangażowanie, buzz, potencjał viralowy, strategie zespołu cyfrowego, viralowe sukcesy i wpadki.
+- **Momentum**: z debat, wydarzeń, viralów i trendu sondaży (efekt bandwagon), z zanikiem w czasie.
+- **Osobowość**: 10 statystyk (w tym organizacja kampanii, media, poparcie oddolne i ukryta podatność na skandale), indywidualne losowanie wokół profilu, cechy (np. „Teflon”, „Magnes na kontrowersje”), style AI (agresywny, establishmentowy, oddolny, medialny, zrównoważony). Statystyki rywali widać tylko w przybliżeniu.
+- **Oś czasu** (`engine/timeline.ts`): start → prawybory (wybór wiceprezydenta, jedność partii) → konwencje → kampania → debaty → finisz → Election Day → Election Night.
+- **Election Night**: banery „STAN — PROJEKCJA DLA… +EV”, pasek 270 TO WIN, pełnoekranowy ekran zwycięstwa.
+- **Analiza**: exit poll grup (poparcie, frekwencja, zmiana od startu), swing states z oznaczeniem przejęć, największe wygrane i porażki, tekstowe podsumowanie przyczyn zwycięstwa.
 
 ## Mechaniki
 

@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react';
 import { useGame } from '../../store/gameStore';
 import type { CandidateSetup, Difficulty, PartyId, ProfileId } from '../../engine/types';
 import { PARTIES, PARTY_LIST } from '../../data/parties';
-import { PROFILES, PROFILE_LIST } from '../../data/profiles';
+import { PROFILES, PROFILE_LIST, STAT_LABEL, TRAIT_META, VISIBLE_STATS, deriveTraits } from '../../data/profiles';
 import { STATES, STATE_BY_CODE } from '../../data/states';
 import { ISSUES } from '../../data/issues';
 import { generatePlatform, STYLE_LABEL, type PlatformStyle } from '../../engine/platform';
-import { createGame } from '../../engine/setup';
+import { createGame, rollStats } from '../../engine/setup';
 import { computeSnapshot } from '../../engine/voterModel';
 import { randomSeed } from '../../engine/rng';
 import { Avatar, StatBar } from '../components/common';
@@ -24,7 +24,7 @@ const DEFAULTS: { name: string; party: PartyId; profile: ProfileId; home: string
 function freshCandidate(i: number, style: PlatformStyle = 'mainstream'): CandidateSetup {
   const d = DEFAULTS[i];
   const p = generatePlatform(d.party, d.profile, style, randomSeed());
-  return { name: d.name, party: d.party, profile: d.profile, homeState: d.home, ...p };
+  return { name: d.name, party: d.party, profile: d.profile, homeState: d.home, ...p, stats: rollStats(d.profile, randomSeed()) };
 }
 
 const LENGTHS = [
@@ -199,7 +199,7 @@ export function SetupScreen() {
                   <div className="row" style={{ gap: 10 }}>
                     <label className="field grow">
                       Profil
-                      <select className="select" value={c.profile} onChange={(e) => update(i, { profile: e.target.value as ProfileId })}>
+                      <select className="select" value={c.profile} onChange={(e) => update(i, { profile: e.target.value as ProfileId, stats: rollStats(e.target.value as ProfileId, randomSeed()) })}>
                         {PROFILE_LIST.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.label}
@@ -222,12 +222,26 @@ export function SetupScreen() {
                     {prof.description}
                   </div>
                   <div className="stat-grid">
-                    <StatBar label="Charyzma" value={prof.stats.charisma} color={color} />
-                    <StatBar label="Debaty" value={prof.stats.debate} color={color} />
-                    <StatBar label="Doświadczenie" value={prof.stats.experience} color={color} />
-                    <StatBar label="Wiarygodność" value={prof.stats.integrity} color={color} />
-                    <StatBar label="Zbiórki" value={prof.stats.fundraising} color={color} />
-                    <StatBar label="Dyscyplina" value={prof.stats.discipline} color={color} />
+                    {VISIBLE_STATS.map((k) => (
+                      <StatBar key={k} label={STAT_LABEL[k]} value={(c.stats ?? prof.stats)[k]} color={color} />
+                    ))}
+                    <div className="col" style={{ gap: 3 }}>
+                      <div className="spread tiny">
+                        <span className="muted">Skandale</span>
+                        <span className="mono">?</span>
+                      </div>
+                      <div className="tiny muted">ukryte</div>
+                    </div>
+                  </div>
+                  <div className="row wrap" style={{ gap: 4, marginTop: 8 }}>
+                    {deriveTraits(c.stats ?? prof.stats).map((t) => (
+                      <span key={t} className={`chip trait ${TRAIT_META[t].good ? 'good' : 'bad'}`} title={TRAIT_META[t].desc}>
+                        {TRAIT_META[t].icon} {TRAIT_META[t].label}
+                      </span>
+                    ))}
+                    <button className="btn sm ghost" style={{ marginLeft: 'auto' }} onClick={() => update(i, { stats: rollStats(c.profile, randomSeed()) })} title="Każdy kandydat ma indywidualne statystyki wokół profilu">
+                      🎲 Losuj cechy
+                    </button>
                   </div>
                 </div>
                 <div className="section col grow">

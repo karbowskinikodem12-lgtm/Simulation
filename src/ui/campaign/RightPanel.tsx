@@ -3,12 +3,16 @@ import { useGame } from '../../store/gameStore';
 import { STATE_BY_CODE, REGION_LABEL, DONOR_HUBS } from '../../data/states';
 import { ISSUES, ISSUE_BY_ID } from '../../data/issues';
 import { TUNING } from '../../engine/config';
-import { AD_KIND_LABEL, SCHEDULE_META, adDailyCost, officeCost } from '../../engine/actions';
-import { leaderOf, stateIdeals, stateSalience, NATIONAL_IDEAL } from '../../engine/voterModel';
+import { AD_KIND_LABEL, SCHEDULE_META, mediaIntensity, officeCost, saturation, suggestedBudget, travelCost } from '../../engine/actions';
+import { leaderOf, rateState, stateIdeals, stateSalience, NATIONAL_IDEAL } from '../../engine/voterModel';
 import { pollAverage } from '../../engine/polls';
 import { fmtMoney } from '../../engine/util';
-import type { AdKind, IssueId, ScheduleKind } from '../../engine/types';
-import { ratingOf, RATING_LABEL } from '../colors';
+import type { AdChannel, AdKind, IssueId, ScheduleKind } from '../../engine/types';
+import { RATING_COLORS } from '../colors';
+import { GROUP_LABEL } from '../../engine/groups';
+import type { GroupId } from '../../engine/types';
+
+const STATE_GROUPS: GroupId[] = ['young', 'senior', 'city', 'suburb', 'rural', 'college', 'noncollege', 'independent'];
 import { battlegrounds, candColor, dayLabel } from '../selectors';
 import { Sparkline } from '../charts/LineChart';
 
@@ -17,30 +21,57 @@ export function RightPanel() {
   return <aside className="side right panel">{selected ? <StatePanel code={selected} /> : <NationalPanel />}</aside>;
 }
 
-function AdForm({ scope }: { scope: string }) {
+const AMOUNTS = [0.5, 1, 2.5, 5, 10, 20];
+
+function MediaBuyForm({ scope }: { scope: string }) {
   const game = useGame((s) => s.game)!;
-  const runAd = useGame((s) => s.runAd);
+  const runMedia = useGame((s) => s.runMedia);
   const player = game.candidates.find((c) => c.id === game.playerId)!;
   const rivals = game.candidates.filter((c) => c.id !== player.id);
+  const channels: AdChannel[] = scope === 'national' ? ['tv', 'digital'] : ['tv', 'digital', 'canvass'];
+  const [channel, setChannel] = useState<AdChannel>('tv');
   const [kind, setKind] = useState<AdKind>('positive');
   const [days, setDays] = useState(7);
+  const [amount, setAmount] = useState(() => suggestedBudget('tv', scope));
   const [target, setTarget] = useState(rivals[0].id);
   const [issue, setIssue] = useState<IssueId>('economy');
-  const cost = adDailyCost(scope) * days;
+  const ch = channels.includes(channel) ? channel : 'tv';
+  const intensity = mediaIntensity(player, ch, scope, amount, days);
+  const ref = mediaIntensity(player, ch, scope, suggestedBudget(ch, scope, days), days);
+  const sat = saturation(game, player.id, ch, scope);
+  const perMillion = intensity / Math.max(0.1, amount);
+  const where = scope === 'national' ? 'w całym kraju' : `w stanie ${STATE_BY_CODE[scope].name}`;
   return (
     <div className="action-card col">
       <div className="spread">
-        <b>📺 Kampania reklamowa</b>
+        <b>💸 Wydatki kampanii</b>
         <span className="tiny muted">{scope === 'national' ? 'cały kraj' : STATE_BY_CODE[scope].name}</span>
       </div>
       <div className="segmented">
-        {(Object.keys(AD_KIND_LABEL) as AdKind[]).map((k) => (
-          <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
-            {k === 'positive' ? 'Pozytywna' : k === 'attack' ? 'Atak' : 'Tematyczna'}
+        {channels.map((c) => (
+          <button
+            key={c}
+            className={ch === c ? 'on' : ''}
+            onClick={() => {
+              setChannel(c);
+              setAmount(suggestedBudget(c, scope, days));
+              if (c === 'canvass') setKind('positive');
+            }}
+          >
+            {c === 'tv' ? '📺 TV' : c === 'digital' ? '📱 Internet' : '🚪 Door-to-door'}
           </button>
         ))}
       </div>
-      {kind === 'attack' && (
+      {ch !== 'canvass' && (
+        <div className="segmented">
+          {(Object.keys(AD_KIND_LABEL) as AdKind[]).map((k) => (
+            <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>
+              {k === 'positive' ? 'Pozytywna' : k === 'attack' ? 'Atak' : 'Tematyczna'}
+            </button>
+          ))}
+        </div>
+      )}
+      {ch !== 'canvass' && kind === 'attack' && (
         <select className="select" value={target} onChange={(e) => setTarget(e.target.value)}>
           {rivals.map((r) => (
             <option key={r.id} value={r.id}>
@@ -49,7 +80,7 @@ function AdForm({ scope }: { scope: string }) {
           ))}
         </select>
       )}
-      {kind === 'issue' && (
+      {ch !== 'canvass' && kind === 'issue' && (
         <select className="select" value={issue} onChange={(e) => setIssue(e.target.value as IssueId)}>
           {ISSUES.map((i) => (
             <option key={i.id} value={i.id}>
@@ -58,6 +89,22 @@ function AdForm({ scope }: { scope: string }) {
           ))}
         </select>
       )}
+      <div className="col" style={{ gap: 4 }}>
+        <div className="spread tiny">
+          <span className="muted">Budżet</span>
+          <b className="mono" style={{ fontSize: 14 }}>
+            {fmtMoney(amount)}
+          </b>
+        </div>
+        <input type="range" className="money-range" min={0.2} max={Math.max(1, Math.min(40, Math.floor(player.funds)))} step={0.1} value={Math.min(amount, Math.max(1, player.funds))} onChange={(e) => setAmount(Number(e.target.value))} />
+        <div className="row wrap" style={{ gap: 4 }}>
+          {AMOUNTS.map((a) => (
+            <button key={a} className={`btn sm${Math.abs(amount - a) < 0.05 ? ' active' : ''}`} disabled={a > player.funds} onClick={() => setAmount(a)}>
+              ${a}M
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="spread">
         <div className="segmented">
           {[7, 14].map((d) => (
@@ -66,14 +113,34 @@ function AdForm({ scope }: { scope: string }) {
             </button>
           ))}
         </div>
-        <button className="btn sm primary" disabled={player.funds < cost} onClick={() => runAd({ scope, kind, days, targetId: kind === 'attack' ? target : undefined, issue: kind === 'issue' ? issue : undefined })}>
-          Emituj · {fmtMoney(cost)}
-        </button>
+        <div className="col" style={{ gap: 2, alignItems: 'flex-end' }}>
+          <span className="tiny muted">Siła oddziaływania</span>
+          <EffectPips value={intensity / Math.max(0.01, ref)} />
+        </div>
       </div>
       <div className="tiny muted">
-        {kind === 'attack' ? 'Obniża poparcie rywala, ale lekko psuje Twój wizerunek.' : kind === 'issue' ? 'Buduje poparcie i podbija znaczenie wybranego tematu.' : 'Buduje rozpoznawalność i poparcie.'}
+        {sat > 0.5 ? '⚠️ Rynek mocno nasycony — kolejne wydatki dadzą niewiele. ' : ''}
+        Efekt maleje z każdym kolejnym milionem ({(perMillion * 100).toFixed(0)} pkt/1 mln). {ch === 'canvass' ? 'Door-to-door głównie mobilizuje Twoich wyborców do pójścia na wybory.' : ch === 'digital' ? 'Internet trafia głównie do młodszych wyborców.' : 'Telewizja najlepiej trafia do starszych wyborców.'}
       </div>
+      <button
+        className="btn primary"
+        disabled={player.funds < amount}
+        onClick={() => runMedia({ channel: ch, scope, kind: ch === 'canvass' ? 'positive' : kind, amount, days, targetId: kind === 'attack' ? target : undefined, issue: kind === 'issue' ? issue : undefined })}
+      >
+        Wydaj {fmtMoney(amount)} {where}
+      </button>
     </div>
+  );
+}
+
+function EffectPips({ value }: { value: number }) {
+  const n = Math.max(0, Math.min(5, Math.round(value * 2.5)));
+  return (
+    <span className="pips">
+      {Array.from({ length: 5 }, (_, i) => (
+        <span key={i} className={i < n ? 'on' : ''} />
+      ))}
+    </span>
   );
 }
 
@@ -104,8 +171,10 @@ function StatePanel({ code }: { code: string }) {
   const s = STATE_BY_CODE[code];
   const sup = snap.states[code];
   const l = leaderOf(sup.estimate);
-  const rating = ratingOf(l.margin);
   const prob = game.forecast?.stateWinProb[code];
+  const rating = rateState(game, sup.estimate);
+  const leadProb = prob ? Math.max(...Object.values(prob)) : 0.5;
+  const competitiveness = leadProb < 0.7 ? { t: 'bardzo wysoka', c: 'var(--accent)' } : leadProb < 0.85 ? { t: 'wysoka', c: 'var(--warn)' } : leadProb < 0.97 ? { t: 'umiarkowana', c: 'var(--text-2)' } : { t: 'niska', c: 'var(--muted)' };
   const avg = pollAverage(game, code, 21);
   const player = game.candidates.find((c) => c.id === game.playerId);
   const rt = game.states[code];
@@ -139,8 +208,8 @@ function StatePanel({ code }: { code: string }) {
         </div>
         <div className="row wrap" style={{ marginTop: 6 }}>
           <span className="chip">{s.ev} głosów elektorskich</span>
-          <span className="chip" style={{ color: candColor(game, l.id) }}>
-            {RATING_LABEL[rating]}
+          <span className="chip" style={{ color: '#fff', background: RATING_COLORS[rating.key], borderColor: 'transparent' }}>
+            {rating.label}
           </span>
           {l.margin < 0.06 && <span className="chip swing">SWING STATE</span>}
           {s.districts && <span className="chip">Podział głosów wg okręgów</span>}
@@ -171,8 +240,38 @@ function StatePanel({ code }: { code: string }) {
           );
         })}
         <div className="tiny muted">
-          Niezdecydowani {(sup.undecided * 100).toFixed(1)}% · {avg ? `średnia z ${avg.count} sondaży` : 'brak świeżych sondaży — estymacja modelu'} · frekwencja 2020: {Math.round(s.turnout * 100)}%
+          Niezdecydowani {(sup.undecided * 100).toFixed(1)}% · {avg ? `średnia z ${avg.count} sondaży` : 'brak świeżych sondaży — estymacja modelu'}
         </div>
+        <div className="state-kpis">
+          <div>
+            <div className="tiny muted">Konkurencyjność</div>
+            <b style={{ color: competitiveness.c }}>{competitiveness.t}</b>
+          </div>
+          <div>
+            <div className="tiny muted">Prognozowana frekwencja</div>
+            <b>{Math.round(sup.turnout * 100)}%</b> <span className="tiny muted">(2020: {Math.round(s.turnout * 100)}%)</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="section col">
+        <div className="panel-title">Grupy wyborców</div>
+        {STATE_GROUPS.map((g) => (
+          <div key={g} className="group-row">
+            <span className="tiny ellipsis" title={GROUP_LABEL[g]}>
+              {GROUP_LABEL[g]}
+            </span>
+            <div className="stack-bar">
+              {game.candidates.map((c) => (
+                <div key={c.id} style={{ width: `${sup.groupsEst[g][c.id] * 100}%`, background: c.color }} title={`${c.name}: ${(sup.groupsEst[g][c.id] * 100).toFixed(0)}%`} />
+              ))}
+            </div>
+            <span className="tiny mono muted" style={{ width: 34, textAlign: 'right' }} title="Udział w elektoracie stanu">
+              {Math.round(sup.groups[g].size * 100)}%
+            </span>
+          </div>
+        ))}
+        <div className="tiny muted">Paski: poparcie w grupie · liczba: udział grupy wśród dorosłych mieszkańców.</div>
       </div>
 
       <div className="section col">
@@ -205,8 +304,14 @@ function StatePanel({ code }: { code: string }) {
             <span className="tiny" title="Wiece i wizyty">
               📣 {(rt.presence[c.id] ?? 0).toFixed(1)}
             </span>
-            <span className="tiny" title="Reklamy">
+            <span className="tiny" title="Reklamy TV">
               📺 {(rt.ads[c.id] ?? 0).toFixed(1)}
+            </span>
+            <span className="tiny" title="Kampania internetowa">
+              📱 {(rt.digital[c.id] ?? 0).toFixed(1)}
+            </span>
+            <span className="tiny" title="Door-to-door">
+              🚪 {(rt.canvass[c.id] ?? 0).toFixed(1)}
             </span>
             <span className="tiny" title="Biura terenowe">
               🏢 {'●'.repeat(rt.offices[c.id] ?? 0)}
@@ -218,7 +323,12 @@ function StatePanel({ code }: { code: string }) {
 
       {player && (
         <div className="section col">
-          <div className="panel-title">Działania w stanie</div>
+          <div className="panel-title">
+            Działania w stanie
+            <span className="tiny muted" style={{ textTransform: 'none', letterSpacing: 0 }}>
+              podróż z {STATE_BY_CODE[player.location]?.code ?? '—'}: {fmtMoney(travelCost(player.location, code))}
+            </span>
+          </div>
           <ScheduleButton kind="rally" state={code} />
           <ScheduleButton kind="townhall" state={code} />
           <ScheduleButton kind="fundraiser" state={code} />
@@ -231,7 +341,7 @@ function StatePanel({ code }: { code: string }) {
               Otwórz · {fmtMoney(officeCost(code))}
             </button>
           </div>
-          <AdForm scope={code} />
+          <MediaBuyForm scope={code} />
         </div>
       )}
 
@@ -288,9 +398,10 @@ function NationalPanel() {
           </div>
           <ScheduleButton kind="speech" issue={issue} />
           <ScheduleButton kind="interview" />
+          <ScheduleButton kind="socialBlitz" />
           <ScheduleButton kind="debatePrep" disabledReason={nextDebate ? undefined : 'Brak zaplanowanych debat'} />
           <ScheduleButton kind="rest" />
-          <AdForm scope="national" />
+          <MediaBuyForm scope="national" />
         </div>
       ) : (
         <div className="section col">
@@ -341,7 +452,7 @@ function NationalPanel() {
           {myAds.map((a) => (
             <div key={a.id} className="spread tiny">
               <span>
-                {a.kind === 'attack' ? '⚔️' : a.kind === 'issue' ? '📌' : '📺'} {a.scope === 'national' ? 'Cały kraj' : STATE_BY_CODE[a.scope].name}
+                {a.channel === 'canvass' ? '🚪' : a.channel === 'digital' ? '📱' : a.kind === 'attack' ? '⚔️' : '📺'} {a.scope === 'national' ? 'Cały kraj' : STATE_BY_CODE[a.scope].name}
                 {a.issue ? ` · ${ISSUE_BY_ID[a.issue].short}` : ''}
               </span>
               <span className="muted">{a.daysLeft} dni</span>

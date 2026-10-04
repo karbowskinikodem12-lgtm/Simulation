@@ -1,5 +1,5 @@
 import { test } from 'vitest';
-import { advanceDay, chooseEventOption, concludeDebate, playDebateRound, simulateToEnd } from '../src/engine/simulation';
+import { advanceDay, chooseDebateStrategy, chooseEventOption, concludeDebate, playDebateRound, simulateToEnd } from '../src/engine/simulation';
 import { DEBATE_ROUNDS } from '../src/engine/debate';
 import type { GameState } from '../src/engine/types';
 import { makeGame } from './helpers';
@@ -25,7 +25,7 @@ function report(label: string, games: GameState[]) {
 
 // Statistical sanity check of many campaigns. Run with `npm run simulate`.
 test.skipIf(!process.env.SIMULATE)('balance report', () => {
-  const N = 30;
+  const N = Number(process.env.N ?? 24);
   const spectator: GameState[] = [];
   for (let i = 0; i < N; i++) {
     const g = makeGame(1000 + i, { three: i % 4 === 0, incumbentParty: i % 2 ? 'DEM' : 'REP' });
@@ -43,7 +43,10 @@ test.skipIf(!process.env.SIMULATE)('balance report', () => {
       if (g.pendingEvent) chooseEventOption(g, 0);
       if (g.liveDebate) {
         const opts = ['facts', 'attack', 'empathy', 'pivot'] as const;
-        while (g.liveDebate.round < DEBATE_ROUNDS) playDebateRound(g, opts[(guard + g.liveDebate.round) % 4]);
+        const live = g.liveDebate;
+        if (live.stage === 'strategy') chooseDebateStrategy(g, 'positive');
+        while (live.round < DEBATE_ROUNDS) playDebateRound(g, opts[(guard + live.round) % 4]);
+        concludeDebate(g);
         concludeDebate(g);
       }
       advanceDay(g);

@@ -8,6 +8,7 @@ import { Ticker, NewsLog } from '../campaign/Ticker';
 import { EventModal } from '../modals/EventModal';
 import { DebateModal } from '../modals/DebateModal';
 import { HelpModal } from '../modals/HelpModal';
+import { BreakingBanner } from '../components/BreakingBanner';
 
 /** Milliseconds per campaign day at each speed. */
 const DAY_MS: Record<Speed, number> = { 0: 0, 1: 1500, 2: 750, 3: 300 };
@@ -53,8 +54,9 @@ export function CampaignScreen() {
         <RightPanel />
       </div>
       <Ticker />
+      <BreakingBanner />
       {game.pendingEvent && <EventModal />}
-      {game.liveDebate && <DebateModal />}
+      {game.liveDebate && !game.pendingEvent && <DebateModal />}
       {showLog && <NewsLog />}
       {showHelp && <HelpModal onClose={() => toggleHelp(false)} />}
     </div>

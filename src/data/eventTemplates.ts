@@ -1,5 +1,5 @@
 import type { Effect } from '../engine/effects';
-import type { Candidate, GameState, IssueId, NewsTone } from '../engine/types';
+import type { Candidate, GameState, IssueId, NewsTone, Severity } from '../engine/types';
 import { DISASTER_COAST, RUST_BELT, BORDER } from './states';
 
 export interface EventChoice {
@@ -12,7 +12,7 @@ export interface EventChoice {
   aiWeight: number;
 }
 
-export type EventCategory = 'economy' | 'scandal' | 'crisis' | 'endorsement' | 'opportunity' | 'disaster' | 'world' | 'media';
+export type EventCategory = 'economy' | 'scandal' | 'crisis' | 'endorsement' | 'opportunity' | 'disaster' | 'world' | 'media' | 'social' | 'campaign';
 
 export interface EventTemplate {
   id: string;
@@ -38,10 +38,18 @@ export interface EventTemplate {
   effects?: Effect[];
   choices?: EventChoice[];
   impact?: number;
+  /** News weight: most events are minor, a few are game changers. Defaults to 'moderate'. */
+  tier?: Severity;
+  /** Fired by the campaign calendar, never by the random roll. */
+  scheduled?: boolean;
+  /** Pick ctx.state for a given candidate (e.g. the best swing state for a running mate). */
+  stateFor?: (g: GameState, candId: string) => string;
 }
 
-const lowIntegrity = (c: Candidate) => 1.6 - c.stats.integrity / 100;
-const lowDiscipline = (c: Candidate) => 1.6 - c.stats.discipline / 100;
+const scandalProne = (c: Candidate) => 0.4 + c.stats.scandalRisk / 60;
+const lowIntegrity = (c: Candidate) => (1.6 - c.stats.integrity / 100) * scandalProne(c);
+const lowDiscipline = (c: Candidate) => (1.6 - c.stats.discipline / 100) * scandalProne(c);
+const SWING = ['PA', 'MI', 'WI', 'GA', 'AZ', 'NC', 'NV'];
 
 export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------- scandals ----------------
@@ -76,7 +84,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     cooldown: 60,
     once: true,
     target: 'candidate',
-    targetWeight: (c) => (c.profile === 'business' || c.profile === 'celebrity' ? 2.5 : 0.6),
+    targetWeight: (c) => (c.profile === 'business' || c.profile === 'celebrity' ? 2.5 : 0.6) * scandalProne(c),
     title: 'Pytania o zeznania podatkowe {self}',
     text: 'Media domagają się publikacji zeznań podatkowych {self}. Krążą plotki o rajach podatkowych i agresywnej optymalizacji.',
     tone: 'bad',
@@ -140,6 +148,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   },
   {
     id: 'october_surprise',
+    tier: 'major',
     category: 'scandal',
     icon: '💣',
     weight: 2.2,
@@ -150,7 +159,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     target: 'candidate',
     targetWeight: (c, g) => {
       const lead = g.history[g.history.length - 1]?.winProb[c.id] ?? 0.5;
-      return 0.3 + lead * 2;
+      return (0.3 + lead * 2) * scandalProne(c);
     },
     title: 'OCTOBER SURPRISE: kompromitujące dokumenty o {self}',
     text: 'Na kilka dni przed wyborami wielki dziennik publikuje dokumenty sugerujące ukrywanie konfliktu interesów przez {self}. To może zmienić wynik.',
@@ -269,6 +278,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   // ---------------- world events ----------------
   {
     id: 'hurricane',
+    tier: 'major',
     category: 'disaster',
     icon: '🌀',
     weight: 0.8,
@@ -289,6 +299,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   },
   {
     id: 'intl_crisis',
+    tier: 'major',
     category: 'world',
     icon: '🌐',
     weight: 0.8,
@@ -298,7 +309,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     title: 'Kryzys międzynarodowy: napięcie na Morzu Południowochińskim',
     text: 'Okręty dwóch mocarstw o mały włos nie zderzyły się w cieśninie. Rynki nerwowo reagują, a wyborcy pytają, kto lepiej poradzi sobie jako głównodowodzący.',
     tone: 'breaking',
-    effects: [{ k: 'salience', issue: 'foreign', v: 0.45 }, { k: 'econ', field: 'gas', v: 0.15 }],
+    effects: [{ k: 'salience', issue: 'foreign', v: 0.45 }, { k: 'econ', field: 'gas', v: 0.15 }, { k: 'econ', field: 'stocks', v: -120 }, { k: 'interest', v: 2 }],
     choices: [
       { label: 'Twarda postawa: „Ameryka się nie ugnie”', hint: 'Zyskujesz, jeśli masz doświadczenie lub konserwatywny profil.', effects: [{ k: 'position', t: 'self', issue: 'foreign', v: 8 }, { k: 'momentum', t: 'self', v: 0.02 }], aiWeight: 2 },
       { label: 'Wezwanie do dyplomacji i sojuszników', hint: 'Bezpieczne, uspokaja umiarkowanych.', effects: [{ k: 'position', t: 'self', issue: 'foreign', v: -6 }, { k: 'fav', t: 'self', v: 1 }], aiWeight: 2 },
@@ -307,6 +318,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   },
   {
     id: 'border_surge',
+    tier: 'major',
     category: 'crisis',
     icon: '🛂',
     weight: 0.8,
@@ -326,6 +338,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
   },
   {
     id: 'market_crash',
+    tier: 'major',
     category: 'economy',
     icon: '📉',
     weight: 0.5,
@@ -334,7 +347,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     title: 'Krach na Wall Street: S&P 500 traci 7% w jeden dzień',
     text: 'Panika na giełdach po bankructwie dużego funduszu. Ekonomiści ostrzegają przed recesją. Wyborcy patrzą na partię rządzącą.',
     tone: 'breaking',
-    effects: [{ k: 'econ', field: 'gdp', v: -1.1 }, { k: 'econ', field: 'unemployment', v: 0.3 }, { k: 'salience', issue: 'economy', v: 0.5 }],
+    effects: [{ k: 'econ', field: 'gdp', v: -1.1 }, { k: 'econ', field: 'unemployment', v: 0.3 }, { k: 'econ', field: 'stocks', v: -380 }, { k: 'approval', v: -3 }, { k: 'salience', issue: 'economy', v: 0.5 }],
     impact: 0,
   },
   {
@@ -347,10 +360,11 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     title: 'Ceny benzyny spadają najszybciej od lat',
     text: 'OPEC zwiększa wydobycie, a średnia cena paliwa spada. Kierowcy oddychają z ulgą.',
     tone: 'good',
-    effects: [{ k: 'econ', field: 'gas', v: -0.4 }, { k: 'econ', field: 'inflation', v: -0.3 }, { k: 'salience', issue: 'inflation', v: -0.15 }],
+    effects: [{ k: 'econ', field: 'gas', v: -0.4 }, { k: 'econ', field: 'inflation', v: -0.3 }, { k: 'approval', v: 1.5 }, { k: 'salience', issue: 'inflation', v: -0.15 }],
   },
   {
     id: 'scotus',
+    tier: 'major',
     category: 'world',
     icon: '⚖️',
     weight: 0.6,
@@ -426,5 +440,92 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     text: 'Oburzenie po decyzji koncernu. Historia chorej nastolatki, której rodziny nie stać na leki, obiegła wszystkie media.',
     tone: 'bad',
     effects: [{ k: 'salience', issue: 'healthcare', v: 0.4 }],
+  },
+
+  // ---------------- minor news (frequent, small effects) ----------------
+  { id: 'podcast', category: 'media', icon: '🎧', weight: 1, cooldown: 8, target: 'candidate', tier: 'minor', targetWeight: (c) => c.stats.media / 50, title: '{self} błyszczy w popularnym podcaście', text: 'Trzygodzinna rozmowa przyciągnęła miliony słuchaczy, głównie młodych mężczyzn.', tone: 'good', effects: [{ k: 'buzz', t: 'self', v: 0.12 }, { k: 'momentum', t: 'self', v: 0.01 }] },
+  { id: 'aide_gaffe', category: 'media', icon: '🗯️', weight: 1, cooldown: 8, target: 'candidate', tier: 'minor', targetWeight: lowDiscipline, title: 'Kontrowersyjna wypowiedź rzecznika kampanii {self}', text: 'Rzecznik sztabu musiał przepraszać za lekceważący komentarz w telewizji.', tone: 'bad', effects: [{ k: 'fav', t: 'self', v: -0.7 }] },
+  { id: 'factory', category: 'economy', icon: '🏭', weight: 0.8, cooldown: 10, target: 'world', tier: 'minor', states: ['MI', 'OH', 'PA', 'GA', 'NC', 'AZ', 'TX', 'IN', 'WI', 'TN'], title: 'Nowa fabryka półprzewodników w {state} — 3 tys. miejsc pracy', text: 'Inwestycja jest prezentowana jako sukces gospodarczy administracji.', tone: 'good', effects: [{ k: 'approval', v: 0.4 }, { k: 'econ', field: 'unemployment', v: -0.02 }] },
+  { id: 'mayor_endorse', category: 'endorsement', icon: '🏙️', weight: 1, cooldown: 6, target: 'candidate', tier: 'minor', states: SWING, title: 'Burmistrz dużego miasta w {state} popiera {self}', text: 'Lokalne poparcie może pomóc w mobilizacji wyborców.', tone: 'good', effects: [{ k: 'local', t: 'self', v: 0.015 }] },
+  { id: 'newspaper', category: 'endorsement', icon: '📰', weight: 0.6, cooldown: 12, minProgress: 0.5, target: 'candidate', tier: 'minor', title: 'Redakcja wpływowego dziennika popiera {self}', text: 'Kolegium redakcyjne opublikowało długi tekst rekomendujący kandydata.', tone: 'good', effects: [{ k: 'fav', t: 'self', v: 0.8 }] },
+  { id: 'protest', category: 'world', icon: '✊', weight: 0.7, cooldown: 10, target: 'world', tier: 'minor', states: ['CA', 'NY', 'IL', 'OR', 'WA', 'MN', 'GA', 'PA'], title: 'Duże protesty uliczne w {state}', text: 'Tysiące ludzi wyszły na ulice. Temat porządku publicznego i praw obywatelskich wraca do mediów.', effects: [{ k: 'salience', issue: 'social', v: 0.1 }, { k: 'salience', issue: 'security', v: 0.1 }] },
+  { id: 'factcheck', category: 'media', icon: '🔎', weight: 1, cooldown: 8, target: 'candidate', tier: 'minor', targetWeight: lowIntegrity, title: 'Fact-checkerzy punktują {self}', text: 'Trzy twierdzenia z ostatniego wystąpienia oznaczono jako „mylące”.', tone: 'bad', effects: [{ k: 'fav', t: 'self', v: -0.6 }] },
+  { id: 'online_record', category: 'social', icon: '💸', weight: 0.8, cooldown: 10, target: 'candidate', tier: 'minor', targetWeight: (c) => c.stats.grassroots / 50, title: 'Rekordowy dzień zbiórki online {self}', text: 'Średnia wpłata: 32 dolary. Drobni darczyńcy wciąż są zmobilizowani.', tone: 'good', effects: [{ k: 'funds', t: 'self', v: 1.5, src: 'small' }, { k: 'enthusiasm', t: 'self', v: 1 }] },
+  { id: 'actor_endorse', category: 'endorsement', icon: '🎬', weight: 0.8, cooldown: 8, target: 'candidate', tier: 'minor', title: 'Znany aktor nagrywa film wspierający {self}', text: 'Film obejrzało kilka milionów osób w ciągu doby.', tone: 'good', effects: [{ k: 'buzz', t: 'self', v: 0.15 }] },
+  { id: 'shakeup', category: 'campaign', icon: '🔄', weight: 0.6, cooldown: 20, target: 'candidate', tier: 'minor', targetWeight: (c) => (c.momentum < 0 ? 2 : 0.5), title: 'Zmiany w sztabie {self}', text: 'Kierownik kampanii odchodzi. Media piszą o napięciach w zespole.', tone: 'bad', effects: [{ k: 'fav', t: 'self', v: -0.4 }, { k: 'stamina', t: 'self', v: -5 }] },
+  { id: 'football', category: 'campaign', icon: '🏈', weight: 0.7, cooldown: 12, target: 'candidate', tier: 'minor', states: SWING, title: '{self} na meczu futbolu w {state}', text: 'Zdjęcia z trybun rozeszły się po lokalnych mediach.', effects: [{ k: 'local', t: 'self', v: 0.01 }, { k: 'buzz', t: 'self', v: 0.05 }] },
+  { id: 'meme', category: 'social', icon: '😂', weight: 0.8, cooldown: 8, target: 'candidate', tier: 'minor', targetWeight: (c) => c.stats.media / 60, title: 'Mem z {self} podbija internet', text: 'Nie wiadomo jeszcze, czy to pomoże, czy zaszkodzi.', effects: [{ k: 'chance', p: 0.6, yes: [{ k: 'buzz', t: 'self', v: 0.15 }], no: [{ k: 'buzz', t: 'self', v: -0.1 }, { k: 'fav', t: 'self', v: -0.3 }] }] },
+  { id: 'volunteers', category: 'campaign', icon: '🚪', weight: 0.8, cooldown: 8, target: 'candidate', tier: 'minor', states: SWING, targetWeight: (c) => c.stats.grassroots / 50, title: 'Wolontariusze {self} odwiedzili 100 tys. domów w {state}', text: 'Sztab chwali się rekordowym weekendem w terenie.', tone: 'good', effects: [{ k: 'local', t: 'self', v: 0.012 }, { k: 'enthusiasm', t: 'self', v: 0.5 }] },
+  { id: 'weather_good', category: 'economy', icon: '📈', weight: 0.6, cooldown: 14, target: 'world', tier: 'minor', title: 'Sprzedaż detaliczna rośnie szybciej od oczekiwań', text: 'Amerykanie wydają więcej — ekonomiści odnotowują poprawę nastrojów.', tone: 'good', effects: [{ k: 'econ', field: 'gdp', v: 0.1 }, { k: 'approval', v: 0.4 }] },
+  { id: 'housing', category: 'economy', icon: '🏠', weight: 0.6, cooldown: 14, target: 'world', tier: 'minor', title: 'Ceny mieszkań biją kolejny rekord', text: 'Młodzi Amerykanie coraz rzadziej stać na własny dom.', tone: 'bad', effects: [{ k: 'salience', issue: 'inflation', v: 0.08 }, { k: 'approval', v: -0.3 }] },
+  { id: 'campus', category: 'world', icon: '🎓', weight: 0.5, cooldown: 14, target: 'world', tier: 'minor', title: 'Spór o czesne na uniwersytetach stanowych', text: 'Studenci protestują przeciw podwyżkom opłat.', effects: [{ k: 'salience', issue: 'education', v: 0.12 }] },
+
+  // ---------------- calendar events ----------------
+  {
+    id: 'vp_pick',
+    category: 'campaign',
+    icon: '🤝',
+    weight: 0,
+    cooldown: 0,
+    target: 'candidate',
+    scheduled: true,
+    tier: 'moderate',
+    stateFor: (g, candId) => {
+      const last = g.history[g.history.length - 1];
+      const idx = g.candidates.findIndex((c) => c.id === candId);
+      const home = g.candidates[idx].homeState;
+      const pool = SWING.filter((s) => s !== home);
+      if (!last) return pool[0];
+      return [...pool].sort((a, b) => {
+        const m = (code: string) => {
+          const arr = last.stateEst[code];
+          return Math.abs(arr[idx] - Math.max(...arr.filter((_, i) => i !== idx)));
+        };
+        return m(a) - m(b);
+      })[0];
+    },
+    title: '{self} wybiera kandydata na wiceprezydenta',
+    text: 'Sztab przedstawił krótką listę. To pierwsza decyzja, która pokaże, jaką prezydenturę planuje kandydat.',
+    choices: [
+      { label: 'Popularny polityk ze swing state ({state})', hint: 'Wyraźny zysk w {state} i okolicach, niewielki efekt ogólnokrajowy.', effects: [{ k: 'local', t: 'self', v: 0.06 }, { k: 'local', t: 'self', v: 0.015, region: true }, { k: 'stat', t: 'self', stat: 'experience', v: 2 }], news: '{self} ogłasza kandydata na wiceprezydenta — wybór pada na polityka ze stanu {state}', tone: 'good', aiWeight: 3 },
+      { label: 'Doświadczony weteran Waszyngtonu', hint: 'Doświadczenie i wiarygodność w górę, mniej entuzjazmu bazy.', effects: [{ k: 'stat', t: 'self', stat: 'experience', v: 8 }, { k: 'stat', t: 'self', stat: 'integrity', v: 3 }, { k: 'enthusiasm', t: 'self', v: -1 }, { k: 'fav', t: 'self', v: 1 }], news: '{self} stawia na doświadczenie: na wiceprezydenta kandyduje wieloletni senator', aiWeight: 2 },
+      { label: 'Młoda, wyrazista postać', hint: 'Entuzjazm i buzz w internecie, ale większe ryzyko kontrowersji.', effects: [{ k: 'buzz', t: 'self', v: 0.35 }, { k: 'enthusiasm', t: 'self', v: 4 }, { k: 'stat', t: 'self', stat: 'media', v: 6 }, { k: 'stat', t: 'self', stat: 'scandalRisk', v: 6 }], news: '{self} zaskakuje: kandydatem na wiceprezydenta jest wschodząca gwiazda partii', tone: 'good', aiWeight: 1 },
+      { label: 'Umiarkowany centrysta', hint: 'Przyciąga niezależnych i umiarkowanych (program przesuwa się do centrum), baza mniej zachwycona.', effects: [{ k: 'moderate', t: 'self', issue: 'economy', v: 0.2 }, { k: 'moderate', t: 'self', issue: 'social', v: 0.2 }, { k: 'moderate', t: 'self', issue: 'immigration', v: 0.15 }, { k: 'fav', t: 'self', v: 1.5 }, { k: 'enthusiasm', t: 'self', v: -2 }], news: '{self} wyciąga rękę do centrum — wiceprezydentem ma być umiarkowany gubernator', aiWeight: 2 },
+    ],
+  },
+  {
+    id: 'primary_unity',
+    category: 'campaign',
+    icon: '🗳️',
+    weight: 0,
+    cooldown: 0,
+    target: 'candidate',
+    scheduled: true,
+    tier: 'minor',
+    title: 'Przegrany rywal z prawyborów: poparcie dla {self} pod znakiem zapytania',
+    text: 'Pokonany w prawyborach polityk ma lojalnych zwolenników. Bez jego poparcia część bazy może zostać w domu.',
+    choices: [
+      { label: 'Przyjąć część jego postulatów', hint: 'Baza zachwycona (+entuzjazm), program przesuwa się od centrum.', effects: [{ k: 'enthusiasm', t: 'self', v: 5 }, { k: 'toBase', t: 'self', v: 0.2 }, { k: 'fav', t: 'self', v: -0.5 }], news: 'Jedność partii: rywal z prawyborów popiera {self} po ustępstwach programowych', tone: 'good', aiWeight: 2 },
+      { label: 'Zaproponować mu rolę w kampanii', hint: 'Umiarkowany zysk entuzjazmu, kosztuje $2 mln.', effects: [{ k: 'enthusiasm', t: 'self', v: 3 }, { k: 'funds', t: 'self', v: -2 }], news: 'Były rywal {self} zostaje współprzewodniczącym kampanii', aiWeight: 2 },
+      { label: 'Zignorować', hint: 'Bez kosztów, ale część zwolenników rywala się zniechęci.', effects: [{ k: 'enthusiasm', t: 'self', v: -3 }], news: 'Rywal z prawyborów odmawia poparcia dla {self}', tone: 'bad', aiWeight: 1 },
+    ],
+  },
+  {
+    id: 'convention',
+    category: 'campaign',
+    icon: '🎉',
+    weight: 0,
+    cooldown: 0,
+    target: 'candidate',
+    scheduled: true,
+    tier: 'major',
+    title: 'Konwencja krajowa: {self} przyjmuje nominację',
+    text: 'Cztery dni przemówień, balony i miliony widzów przed telewizorami. Jaki ma być główny przekaz konwencji?',
+    choices: [
+      { label: 'Jedność partii', hint: 'Silna mobilizacja bazy: duży wzrost entuzjazmu.', effects: [{ k: 'enthusiasm', t: 'self', v: 6 }, { k: 'momentum', t: 'self', v: 0.08 }, { k: 'interest', v: 2 }], news: 'Zjednoczona partia: udana konwencja {self}', tone: 'good', aiWeight: 2 },
+      { label: 'Ręka wyciągnięta do centrum', hint: 'Lepszy wizerunek wśród niezależnych, nieco słabsza mobilizacja.', effects: [{ k: 'fav', t: 'self', v: 3 }, { k: 'momentum', t: 'self', v: 0.06 }, { k: 'moderate', t: 'self', issue: 'economy', v: 0.12 }, { k: 'moderate', t: 'self', issue: 'social', v: 0.12 }, { k: 'interest', v: 2 }], news: '{self} na konwencji: „Będę prezydentem wszystkich Amerykanów”', tone: 'good', aiWeight: 2 },
+      { label: 'Ostra krytyka rywala', hint: 'Duży impuls medialny, ale część wyborców źle znosi negatywny ton.', effects: [{ k: 'momentum', t: 'self', v: 0.1 }, { k: 'fav', t: 'self', v: -1 }, { k: 'fav', t: 'other', v: -2.5 }, { k: 'interest', v: 3 }], news: 'Konwencja {self}: zmasowany atak na {other}', aiWeight: 1 },
+      { label: 'Wielkie show z gwiazdami', hint: 'Rekordowa oglądalność i buzz wśród młodych.', effects: [{ k: 'buzz', t: 'self', v: 0.5 }, { k: 'enthusiasm', t: 'self', v: 3 }, { k: 'momentum', t: 'self', v: 0.07 }, { k: 'interest', v: 4 }], news: 'Gwiazdy na scenie: konwencja {self} z rekordową oglądalnością', tone: 'good', aiWeight: 1 },
+    ],
   },
 ];

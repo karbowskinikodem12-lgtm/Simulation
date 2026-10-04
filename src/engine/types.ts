@@ -36,9 +36,40 @@ export interface CandidateStats {
   charisma: number;
   debate: number;
   experience: number;
+  /** Credibility / integrity. */
   integrity: number;
   fundraising: number;
   discipline: number;
+  /** Organisational skill: ground game, rallies, staff efficiency. */
+  campaign: number;
+  /** Media & online skill: interviews, social media, virality. */
+  media: number;
+  /** Grassroots support: volunteers, small donors, base enthusiasm. */
+  grassroots: number;
+  /** Hidden: how likely and how damaging scandals are. */
+  scandalRisk: number;
+}
+
+export type TraitId = 'orator' | 'debater' | 'machine' | 'moneyMagnet' | 'online' | 'teflon' | 'scandalProne' | 'grassroots' | 'gaffeProne' | 'veteran' | 'outsider';
+
+/** Behavioural archetype used by the AI campaign manager. */
+export type AiStyle = 'aggressive' | 'establishment' | 'grassroots' | 'media' | 'balanced';
+
+export type SocialStrategy = 'positive' | 'attack' | 'policy' | 'viral';
+
+export interface SocialState {
+  followers: number; // millions
+  engagement: number; // %
+  buzz: number; // -1..1, decays
+  strategy: SocialStrategy;
+}
+
+export type FundSource = 'small' | 'major' | 'pac' | 'events' | 'party';
+export type SpendCategory = 'tv' | 'digital' | 'ground' | 'travel' | 'events' | 'staff';
+
+export interface Ledger {
+  raised: Record<FundSource, number>;
+  spent: Record<SpendCategory, number>;
 }
 
 export type ScheduleKind =
@@ -48,6 +79,7 @@ export type ScheduleKind =
   | 'speech'
   | 'interview'
   | 'debatePrep'
+  | 'socialBlitz'
   | 'rest';
 
 export interface ScheduledAction {
@@ -72,6 +104,12 @@ export interface Candidate {
   manifesto: string;
   slogan: string;
   stats: CandidateStats;
+  traits: TraitId[];
+  style: AiStyle;
+  social: SocialState;
+  ledger: Ledger;
+  /** State where the candidate currently is (travel costs). */
+  location: string;
   // dynamic campaign values
   funds: number; // $M
   stamina: number; // 0..100
@@ -93,6 +131,8 @@ export interface CandidateSetup {
   manifesto: string;
   slogan: string;
   color?: string;
+  /** Pre-rolled individual stats (shown in setup); rolled from the profile if absent. */
+  stats?: CandidateStats;
 }
 
 export interface GameSettings {
@@ -109,16 +149,23 @@ export interface StateRuntime {
   attacks: Record<string, number>; // attack-ad stock *targeting* candidate id, decays
   offices: Record<string, number>; // field offices level 0..3 (permanent)
   eventMod: Record<string, number>; // local event effects, decays
+  digital: Record<string, number>; // online ad stock, decays
+  canvass: Record<string, number>; // door-to-door program stock, decays slowly
   banked: Record<string, number>; // early votes already cast (millions)
 }
 
 export type AdKind = 'positive' | 'attack' | 'issue';
+export type AdChannel = 'tv' | 'digital' | 'canvass';
 
 export interface AdCampaign {
   id: string;
   candId: string;
   scope: string; // state code or 'national'
+  channel: AdChannel;
   kind: AdKind;
+  /** Stock added per day (already includes diminishing returns on spend). */
+  intensity: number;
+  budget: number;
   issue?: IssueId;
   targetId?: string;
   daysLeft: number;
@@ -130,6 +177,8 @@ export interface Economy {
   inflation: number; // %
   unemployment: number; // %
   gas: number; // $/gal
+  rate: number; // Fed funds rate %
+  stocks: number; // stock index level
   confidence: number; // 0..100 derived
 }
 
@@ -154,7 +203,10 @@ export interface NewsItem {
   tone: NewsTone;
   candId?: string;
   category: string;
+  severity: Severity;
 }
+
+export type Severity = 'minor' | 'moderate' | 'major';
 
 export interface KeyEvent {
   day: number;
@@ -194,6 +246,18 @@ export interface DebateSlot {
   participants?: string[];
   winner?: string;
   flashPoll?: Record<string, number>;
+  report?: DebateReport;
+}
+
+export type DebateStrategy = 'attack' | 'economy' | 'security' | 'positive' | 'counter';
+
+export interface DebateReport {
+  grades: Record<string, string>;
+  scores: Record<string, number>;
+  strategies: Record<string, DebateStrategy>;
+  headlines: { outlet: string; text: string; lean: number }[];
+  pollShift: Record<string, number>; // pp change in national estimate
+  momentumShift: Record<string, number>;
 }
 
 export interface LiveDebate {
@@ -204,6 +268,8 @@ export interface LiveDebate {
   round: number;
   rounds: DebateRound[];
   totals: Record<string, number>;
+  strategies: Record<string, DebateStrategy>;
+  stage: 'strategy' | 'rounds' | 'report';
 }
 
 export interface DaySnapshot {
@@ -213,6 +279,24 @@ export interface DaySnapshot {
   ev: Record<string, number>; // projected EV (by leader in each state)
   winProb: Record<string, number>;
   stateEst: Record<string, number[]>; // per state: estimated decided share per candidate index
+  funds: Record<string, number>;
+  momentum: Record<string, number>;
+  buzz: Record<string, number>;
+  turnout: number; // projected national turnout
+}
+
+export type GroupId = 'young' | 'middle' | 'senior' | 'city' | 'suburb' | 'rural' | 'college' | 'noncollege' | 'lowInc' | 'midInc' | 'highInc' | 'independent';
+
+export interface GroupResult {
+  shares: Record<string, number>;
+  turnout: number; // fraction of the group that votes
+  size: number; // share of the electorate (adults)
+}
+
+export interface Baseline {
+  groups: Record<GroupId, GroupResult>;
+  stateShares: Record<string, Record<string, number>>;
+  turnout: number;
 }
 
 export interface EconPoint extends Economy {
@@ -235,6 +319,7 @@ export interface StateResult {
   winner: string;
   ev: Record<string, number>; // EV awarded (handles ME/NE splits)
   earlyShare: number; // fraction of votes cast early
+  groups: Record<GroupId, GroupResult>;
 }
 
 export interface ElectionResult {
@@ -246,6 +331,7 @@ export interface ElectionResult {
   contingent: boolean; // decided by the House (no 270)
   turnout: number;
   totalVotes: number;
+  groups: Record<GroupId, GroupResult>;
   analysis: Analysis;
 }
 
@@ -255,6 +341,8 @@ export interface Analysis {
   caveats: string[];
   factors: { label: string; value: number }[]; // winner minus runner-up utility contributions
   tippingPoint?: string;
+  summary: string;
+  swingStates: string[];
 }
 
 export type Phase = 'campaign' | 'election' | 'finished';
@@ -270,6 +358,12 @@ export interface GameState {
   playerId: string | null;
   economy: Economy;
   econHistory: EconPoint[];
+  /** Presidential (administration) approval %, drives the incumbent-party effect. */
+  approval: number;
+  /** Public interest in the election 0..100 (turnout). */
+  interest: number;
+  baseline: Baseline | null;
+  conventions: { candId: string; day: number; done: boolean }[];
   baseSalience: Record<IssueId, number>;
   salienceShock: Record<IssueId, number>;
   /** Per-state campaign runtime. The pseudo-key '__national' holds nationwide ad stock. */

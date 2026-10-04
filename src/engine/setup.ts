@@ -3,22 +3,35 @@
 import { STATES } from '../data/states';
 import { ISSUES, ISSUE_IDS } from '../data/issues';
 import { PARTIES } from '../data/parties';
-import { PROFILES } from '../data/profiles';
+import { PROFILES, deriveTraits } from '../data/profiles';
 import { DIFFICULTY_MULT, ELECTION_DATE, TUNING } from './config';
-import type { Candidate, CandidateSetup, GameSettings, GameState, IssueId, StateRuntime } from './types';
+import type { Candidate, CandidateSetup, CandidateStats, GameSettings, GameState, IssueId, ProfileId, StateRuntime } from './types';
 import { createRng } from './rng';
 import { initialEconomy } from './economy';
 import { scheduleDebates } from './debate';
 import { pushNews } from './news';
 import { refreshDerived } from './simulation';
+import { computeSnapshot, economyIndex } from './voterModel';
 import { clamp } from './util';
+import { emptyLedger } from './actions';
+import { initialSocial } from './social';
+import { scheduleConventions } from './timeline';
 
-export const GAME_VERSION = 1;
+export const GAME_VERSION = 2;
 
 const ALT_COLORS = ['#06b6d4', '#f97316', '#ec4899', '#84cc16', '#a855f7', '#eab308'];
 
 function emptyRuntime(): StateRuntime {
-  return { presence: {}, ads: {}, attacks: {}, offices: {}, eventMod: {}, banked: {} };
+  return { presence: {}, ads: {}, attacks: {}, offices: {}, eventMod: {}, digital: {}, canvass: {}, banked: {} };
+}
+
+/** Profile stats with individual variation, so two governors are never identical. */
+export function rollStats(profile: ProfileId, seed: number): CandidateStats {
+  const rng = createRng(seed);
+  const base = PROFILES[profile].stats;
+  const out = {} as CandidateStats;
+  for (const k of Object.keys(base) as (keyof CandidateStats)[]) out[k] = Math.round(clamp(base[k] + rng.normal(0, 7), 10, 97));
+  return out;
 }
 
 export function campaignStartDate(totalDays: number): string {
@@ -46,6 +59,7 @@ export function createGame(setups: CandidateSetup[], settings: GameSettings): Ga
     usedColors.add(color);
     const isPlayer = settings.playerIndex === i;
     const funds = (party.startFunds + profile.fundsBonus) * (isPlayer ? mult.playerFunds : mult.ai);
+    const stats = s.stats ? { ...s.stats } : rollStats(s.profile, settings.seed + i * 101);
     return {
       id: `c${i}`,
       name: s.name.trim() || `Kandydat ${i + 1}`,
@@ -59,12 +73,17 @@ export function createGame(setups: CandidateSetup[], settings: GameSettings): Ga
       platform: { ...s.platform },
       manifesto: s.manifesto,
       slogan: s.slogan,
-      stats: { ...profile.stats },
+      stats,
+      traits: deriveTraits(stats),
+      style: profile.style,
+      social: initialSocial({ profile: s.profile, stats, party: s.party }, rng),
+      ledger: emptyLedger(),
+      location: s.homeState,
       funds: Math.max(3, funds),
       stamina: 100,
       momentum: 0,
       favorability: Math.round(rng.normal(0, 3)),
-      enthusiasm: clamp((party.brandPenalty > 0 ? 48 : 56) + (s.profile === 'activist' ? 6 : 0) + (s.profile === 'celebrity' ? 4 : 0), 0, 100),
+      enthusiasm: clamp((party.brandPenalty > 0 ? 48 : 54) + (stats.grassroots - 55) / 6, 0, 100),
       debatePrep: 0,
       schedule: [],
       totals: { raised: 0, spent: 0, rallies: 0, adsRun: 0, debatesWon: 0, scandals: 0 },
@@ -98,6 +117,10 @@ export function createGame(setups: CandidateSetup[], settings: GameSettings): Ga
     playerId: settings.playerIndex === null ? null : `c${settings.playerIndex}`,
     economy,
     econHistory: [{ day: 0, ...economy }],
+    approval: clamp(44 + economyIndex(economy) * 12 + rng.normal(0, 3), 30, 62),
+    interest: 45,
+    baseline: null,
+    conventions: [],
     baseSalience,
     salienceShock,
     states,
@@ -124,6 +147,13 @@ export function createGame(setups: CandidateSetup[], settings: GameSettings): Ga
   pushNews(game, `Gospodarka na starcie kampanii: PKB ${economy.gdp.toFixed(1)}%, inflacja ${economy.inflation.toFixed(1)}%, bezrobocie ${economy.unemployment.toFixed(1)}%`, {
     category: 'economy',
   });
+  game.conventions = scheduleConventions(game);
   refreshDerived(game, { initialPolls: true });
+  const snap = computeSnapshot(game);
+  game.baseline = {
+    groups: snap.groups,
+    stateShares: Object.fromEntries(STATES.map((st) => [st.code, { ...snap.states[st.code].shares }])),
+    turnout: snap.turnout,
+  };
   return game;
 }

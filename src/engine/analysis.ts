@@ -7,6 +7,7 @@ import { PARTIES } from '../data/parties';
 import type { Analysis, ElectionResult, GameState, IssueId } from './types';
 import { FACTOR_LABEL, NATIONAL_IDEAL, type FactorKey, type Snapshot } from './voterModel';
 import { fmtMoney } from './util';
+import { GROUP_IDS, GROUP_LABEL, GROUP_SHORT } from './groups';
 
 /** Polish plural for "zwycięstwo". */
 function wins(n: number): string {
@@ -84,6 +85,8 @@ export function analyzeResult(game: GameState, result: ElectionResult, snap: Sna
         return `Lepsza kampania w terenie — ${who.name}: ${who.totals.rallies} wieców i ${fmtMoney(who.totals.spent)} wydatków (rywal: ${other.totals.rallies} wieców, ${fmtMoney(other.totals.spent)}).`;
       case 'home':
         return `Efekt stanu rodzinnego: lokalny patriotyzm w ${STATE_BY_CODE[who.homeState].name} działał na korzyść: ${who.name}.`;
+      case 'social':
+        return `Wygrana w mediach społecznościowych: ${who.name} miał(a) większy zasięg i buzz wśród młodych wyborców.`;
       case 'local':
         return `Lokalne wydarzenia (poparcia, kryzysy, reakcje na katastrofy) przechyliły kilka ważnych stanów na korzyść ${who.name}.`;
       case 'brand':
@@ -111,5 +114,67 @@ export function analyzeResult(game: GameState, result: ElectionResult, snap: Sna
   const tp = tippingPoint(result, winnerId);
   if (tp) reasons.push(`Stan decydujący (tipping point): ${STATE_BY_CODE[tp].name} — to on przesądził o przekroczeniu progu ${EV_TO_WIN} głosów.`);
 
-  return { headline, reasons, caveats, factors: factors.map(({ label, value }) => ({ label, value })), tippingPoint: tp };
+  const { summary, swingStates, groupNotes, rivalNotes } = groupAndStateStory(game, result, winnerId, runnerId);
+  reasons.unshift(...groupNotes);
+  caveats.push(...rivalNotes);
+
+  return { headline, reasons, caveats, factors: factors.map(({ label, value }) => ({ label, value })), tippingPoint: tp, summary, swingStates };
+}
+
+function plMargin(v: number) {
+  return `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)} pkt`;
+}
+
+/**
+ * Narrative built from what changed between the start of the campaign and Election Day:
+ * which voter groups moved, who turned out, and which swing states swung.
+ */
+function groupAndStateStory(game: GameState, result: ElectionResult, W: string, R: string) {
+  const base = game.baseline;
+  const wName = game.candidates.find((c) => c.id === W)!.name;
+  const notes: string[] = [];
+  const rivalNotes: string[] = [];
+  const swingStates = base
+    ? STATES.filter((s) => {
+        const sh = Object.values(base.stateShares[s.code]).sort((a, b) => b - a);
+        return sh[0] - sh[1] < 0.07;
+      })
+        .sort((a, b) => b.ev - a.ev)
+        .map((s) => s.code)
+    : [];
+  if (!base) return { summary: `${wName} wygrywa wybory.`, swingStates, groupNotes: notes, rivalNotes };
+
+  const margin = (shares: Record<string, number>) => (shares[W] ?? 0) - (shares[R] ?? 0);
+  const groups = GROUP_IDS.filter((g) => result.groups[g].size >= 0.08);
+  const gain = groups
+    .map((g) => ({ g, d: margin(result.groups[g].shares) - margin(base.groups[g].shares) }))
+    .sort((a, b) => b.d - a.d);
+  // Turnout growth relative to the electorate as a whole (interest rises for everyone near Election Day).
+  const overall = result.turnout / Math.max(0.01, base.turnout);
+  const turnoutUp = groups
+    .filter((g) => margin(result.groups[g].shares) > 0)
+    .map((g) => ({ g, d: result.groups[g].turnout / Math.max(0.01, base.groups[g].turnout) - overall, size: result.groups[g].size }))
+    .sort((a, b) => b.d * b.size - a.d * a.size);
+
+  const swingMoves = swingStates
+    .filter((code) => result.states[code].winner === W)
+    .map((code) => ({ code, d: margin(result.states[code].shares) - margin(base.stateShares[code]) }))
+    .sort((a, b) => b.d - a.d)
+    .slice(0, 2);
+
+  const parts: string[] = [];
+  if (turnoutUp[0] && turnoutUp[0].d > 0.004) parts.push(`wysoka frekwencja wśród ${GROUP_SHORT[turnoutUp[0].g]}`);
+  const turnoutGroup = turnoutUp[0] && turnoutUp[0].d > 0.004 ? turnoutUp[0].g : undefined;
+  const gainPick = gain.find((x) => x.g !== turnoutGroup && x.d > 0.01);
+  if (gainPick) parts.push(`wzrost poparcia wśród ${GROUP_SHORT[gainPick.g]} (${plMargin(gainPick.d)})`);
+  if (swingMoves.length) parts.push(`poprawa wyników w ${swingMoves.length > 1 ? 'stanach' : 'stanie'} ${swingMoves.map((m) => STATE_BY_CODE[m.code].name).join(' i ')}`);
+  const strongest = groups.filter((g) => margin(result.groups[g].shares) > 0).sort((a, b) => margin(result.groups[b].shares) - margin(result.groups[a].shares))[0];
+  if (!parts.length && strongest) parts.push(`zdecydowana przewaga wśród ${GROUP_SHORT[strongest]}`);
+  const summary = parts.length ? `Zwycięstwo ${wName} zapewniły: ${parts.length > 1 ? parts.slice(0, -1).join(', ') + ' oraz ' + parts[parts.length - 1] : parts[0]}.` : `${wName} utrzymał(a) przewagę z początku kampanii.`;
+
+  if (gain[0] && gain[0].d > 0.01) notes.push(`Największa zmiana w trakcie kampanii: ${GROUP_LABEL[gain[0].g].toLowerCase()} — przewaga ${wName} zmieniła się o ${plMargin(gain[0].d)}.`);
+  const last = gain[gain.length - 1];
+  if (last && last.d < -0.015) rivalNotes.push(`Rywal poprawił wynik w grupie: ${GROUP_LABEL[last.g].toLowerCase()} (${plMargin(-last.d)}).`);
+  if (turnoutUp[0] && turnoutUp[0].d > 0.004) notes.push(`Mobilizacja: frekwencja wśród ${GROUP_SHORT[turnoutUp[0].g]} (grupa sprzyjająca ${wName}) wzrosła szybciej niż w całym elektoracie.`);
+  return { summary, swingStates, groupNotes: notes, rivalNotes };
 }

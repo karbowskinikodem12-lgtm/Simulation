@@ -49,3 +49,13 @@ export function marginFill(color: string, margin: number): string {
 export function heatFill(color: string, t: number): string {
   return mix('#1a2338', color, Math.max(0, Math.min(1, t)));
 }
+
+export const RATING_COLORS: Record<'safeD' | 'likelyD' | 'leanD' | 'tossup' | 'leanR' | 'likelyR' | 'safeR', string> = {
+  safeD: '#1d4ed8',
+  likelyD: '#3b82f6',
+  leanD: '#7aa7f5',
+  tossup: '#8b7d3c',
+  leanR: '#f08b8b',
+  likelyR: '#ef4444',
+  safeR: '#b91c1c',
+};

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import type { Candidate } from '../../engine/types';
 import { PARTIES } from '../../data/parties';
 import { alpha } from '../colors';
@@ -34,16 +35,23 @@ export function PartyTag({ c }: { c: Pick<Candidate, 'party' | 'color'> }) {
 }
 
 export function Modal({ children, wide, onClose }: { children: ReactNode; wide?: boolean; onClose?: () => void }) {
+  // Register once and read the latest callback from a ref: re-registering on every render can
+  // drop the very keydown that triggered a synchronous store update elsewhere.
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    if (!onClose) return;
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeRef.current?.();
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
-  return (
+  }, []);
+  // Portal to <body>: panels use backdrop-filter, which would trap position:fixed children.
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={`modal${wide ? ' wide' : ''}`}>{children}</div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

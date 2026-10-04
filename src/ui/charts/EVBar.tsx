@@ -28,7 +28,9 @@ export function EVBar({ candidates, ev, lean, height = 26, labels = true }: Prop
             <span className="small text-2">{a.name}</span>
           </div>
           <div className="center tiny muted display" style={{ letterSpacing: '0.12em' }}>
-            {EV_TO_WIN} DO WYGRANEJ
+            <span style={{ color: 'var(--accent)', fontSize: 15, fontWeight: 800 }}>{EV_TO_WIN} TO WIN</span>
+            <br />
+            potrzeba do wygranej
           </div>
           <div className="row">
             <span className="small text-2">{b.name}</span>

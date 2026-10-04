@@ -35,7 +35,7 @@ export function LineChart({ series, xLabels, height = 180, yMin, yMax, yFormat =
   const x = (i: number) => pad.l + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
   const y = (v: number) => pad.t + ih - ((v - lo) / (hi - lo || 1)) * ih;
   const ticks = 4;
-  const yTicks = Array.from({ length: ticks + 1 }, (_, i) => lo + ((hi - lo) * i) / ticks);
+  const yTicks = [...new Set(Array.from({ length: ticks + 1 }, (_, i) => lo + ((hi - lo) * i) / ticks))];
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -76,7 +76,7 @@ export function LineChart({ series, xLabels, height = 180, yMin, yMax, yFormat =
             />
           ))}
           {xLabels &&
-            [0, Math.floor((n - 1) / 2), n - 1].map((i) => (
+            [...new Set([0, Math.floor((n - 1) / 2), n - 1])].map((i) => (
               <text key={i} x={x(i)} y={height - 4} fontSize="10" fill="var(--muted)" textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
                 {xLabels(i)}
               </text>
